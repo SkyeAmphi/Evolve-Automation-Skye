@@ -3,8 +3,8 @@
 // @namespace    http://tampermonkey.net/
 // @version      3.3.1.134
 // @description  try to take over the world!
-// @downloadURL  https://gist.github.com/Vollch/b1a5eec305558a48b7f4575d317d7dd1/raw/evolve_automation.user.js
-// @updateURL    https://gist.github.com/Vollch/b1a5eec305558a48b7f4575d317d7dd1/raw/evolve_automation.meta.js
+// @downloadURL  https://gist.github.com/xorngaming/8b159876ca5c204e52da5c5340677b23/raw/71df2347a342601f16d23a51d50b11e3ccf16781/evolve_automation.user.js
+// @updateURL    https://gist.github.com/xorngaming/8b159876ca5c204e52da5c5340677b23/raw/71df2347a342601f16d23a51d50b11e3ccf16781/evolve_automation.meta.js
 // @author       Fafnir
 // @author       TMVictor
 // @author       Vollch
