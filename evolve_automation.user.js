@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Evolve Skye
 // @namespace    http://tampermonkey.net/
-// @version      3.3.1.135
+// @version      3.3.1.136
 // @description  try to take over the world!
 // @downloadURL  https://github.com/SkyeAmphi/Evolve-Automation-Skye/raw/refs/heads/master/evolve_automation.user.js
 // @updateURL    https://github.com/SkyeAmphi/Evolve-Automation-Skye/raw/refs/heads/master/evolve_automation.meta.js
@@ -1708,17 +1708,15 @@
         }
 
         getHabitability() {
-            if (this.id === "junker") {
-                return game.global.genes.challenge ? 1 : 0;
-            }
-            if (this.id === "sludge") {
-                return ((game.global.stats.achieve['ascended'] || game.global.stats.achieve['corrupted']) && game.global.stats.achieve['extinct_junker']) ? 1 : 0;
-            }
-            if (this.id === "ultra_sludge") {
-                return (game.global.stats.achieve['godslayer'] && game.global.stats.achieve['extinct_sludge']) ? 1 : 0;
-            }
-            if (this.genus === "hybrid") {
-                return 0;
+            switch (this.id) {
+                case "junker":
+                    return game.global.genes.challenge ? 1 : 0;
+                case "sludge":
+                    return ((game.global.stats.achieve['ascended'] || game.global.stats.achieve['corrupted']) && game.global.stats.achieve['extinct_junker']) ? 1 : 0;
+                case "ultra_sludge":
+                    return (game.global.stats.achieve['godslayer'] && game.global.stats.achieve['extinct_sludge']) ? 1 : 0;
+                case "hybrid":
+                    return 0;
             }
 
             let unboundMod = game.global.blood.unbound >= 4 ? 0.95 :
@@ -1745,6 +1743,8 @@
                     return game.global.stats.achieve['obsolete']?.l >= 5 ? 1 : 0;
                 case "eldritch":
                     return game.global.stats.achieve['nightmare']?.mg ? 1 : 0;
+                case "hybrid":
+                    return game.global.stats.achieve['godslayer'] ? 1 : 0;
                 case undefined: // Nonexistent custom
                     return 0;
                 default:
@@ -6954,6 +6954,7 @@
 
         priorityList.push(buildings.AsphodelMission);
         priorityList.push(buildings.AsphodelEncampment);
+        priorityList.push(buildings.AsphodelRectory);
         priorityList.push(buildings.AsphodelSoulEngine);
         priorityList.push(buildings.AsphodelMechStation);
         priorityList.push(buildings.AsphodelHarvester);
@@ -6964,7 +6965,6 @@
         priorityList.push(buildings.AsphodelRuneGate);
         priorityList.push(buildings.AsphodelBunker);
         priorityList.push(buildings.AsphodelBlissDen);
-        priorityList.push(buildings.AsphodelRectory);
 
         priorityList.push(buildings.ElysiumMission);
         priorityList.push(buildings.ElysiumAmbush);
@@ -7650,7 +7650,8 @@
             productionFactoryWeighting: "none",
             productionFactoryMinIngredients: 0,
             productionFactoryFocusMaterials: false,
-            replicatorAssignGovernorTask: true
+            replicatorAssignGovernorTask: true,
+            replicatorWeightingMode: "mass",
         }
 
         // Foundry
@@ -7938,6 +7939,16 @@
             if (!settingsRaw.hasOwnProperty("buildingsLimitPowered")) {
                 settingsRaw.buildingsLimitPowered = false;
             }
+        }
+
+        // Specific migrations that should only be executed once
+        if (!settingsRaw.migrationVersion || settingsRaw.migrationVersion < 1) {
+            // Moved upwards in default priority list, needs to be executed before resetting building settings
+            // Settings may not exist yet here
+            if (settingsRaw["bld_p_eden-bliss_den"] && settingsRaw["bld_p_eden-rectory"] && settingsRaw["bld_p_eden-encampment"] && settingsRaw["bld_p_eden-bliss_den"] < settingsRaw["bld_p_eden-rectory"]) {
+                settingsRaw["bld_p_eden-rectory"] = settingsRaw["bld_p_eden-encampment"] + 1;
+            }
+            settingsRaw.migrationVersion = 1;
         }
 
         // Apply default settings
@@ -10309,9 +10320,36 @@
             priorityList[0].push(...priorityGroups["-1"]);
         }
 
-        // Set the replicator to whatever has 1. the highest priority and 2. the highest weighting. Should be improved in the future
+        // For some situation where resource A has 100 weighting and resource B has 200 weighting, while both have 1000 quantity,
+        // we want to spend 2x as much "time" on resource B in some way.
+        // But not all resources take equally long to replicate, and some people may want different behavior.
+        //
+        // Mass mode: Factor in atomic mass (production time) & 1.4 exotic mass nerf.
+        //   A doubled weighting is treated as approximately "spend 2x as much time on this" (based on current quantities).
+        //   Actual quantities may vary a lot (eg may have 10x as much Plywood as compared to).
+        // Quantity mode: Simple quantity split.
+        //   A doubled weighting is treated as approximately "make 2x as much of this".
+        // Legacy mode: None of that matters, we only ever make the resource with the highest weighting. Intended for compat with old configs only. May be removed in the future.
+        let weightFn;
+        switch (settings.replicatorWeightingMode) {
+            case "mass":
+                weightFn = (production, resource) => production.weighting / resource.atomicMass / ((resource === resources.Elerium || resource === resources.Infernite) ? 4 : 1) / resource.currentQuantity;
+                break;
+
+            case "quantity":
+                weightFn = (production, resource) => production.weighting / resource.currentQuantity;
+                break;
+
+            case "legacy":
+            default:
+                weightFn = (production, resource) => production.weighting;
+                break;
+        }
+
+        // Set the replicator to whatever has the highest priority, roughly multiplied by the weighting
         if (priorityList.length > 0 && priorityList[0].length > 0) {
-            var selectedResource = priorityList[0].sort((a, b) => a.weighting - b.weighting)[0];
+            let list = priorityList[0].sort((a, b) => weightFn(a, a.resource) - weightFn(b, b.resource));
+            let selectedResource = settings.replicatorWeightingMode !== "legacy" ? list[list.length - 1] : list[0];
             ReplicatorManager.setResource(selectedResource.id);
         }
 
@@ -13112,7 +13150,10 @@
           + (game.global.space.g_factory?.count > 0 ? 1 : 0) // Graphene plant built in lone survivor
           + (game.global.tauceti.mining_ship?.count > 0 ? 1 : 0) // Extractor ship built
           + (game.global.tech.psychicthrall ?? 0) // Psychic powers
-          + (game.global.tech.psychic ?? 0); // Psychic powers
+          + (game.global.tech.psychic ?? 0) // Psychic powers
+          + (game.global.tech.isle >= 3 ? 1 : 0) // Edenic north/south piers -> spirit syphon tech
+          + (game.global.tech.palace >= 4 ? 1 : 0) // Edenic sealed tomb -> energy drain tech
+        ;
 
         if (game.global.settings.showShipYard) { // TP Ship Yard
           state.tabHash += 1
@@ -13423,6 +13464,8 @@
         verifyGameActionsExist(game.actions.interstellar, buildings, true);
         verifyGameActionsExist(game.actions.portal, buildings, true);
         verifyGameActionsExist(game.actions.galaxy, buildings, true);
+        verifyGameActionsExist(game.actions.tauceti, buildings, true);
+        verifyGameActionsExist(game.actions.eden, buildings, true);
     }
 
     function verifyGameActionsExist(gameObject, scriptObject, hasSubLevels) {
@@ -17701,6 +17744,11 @@
         addStandardHeading(currentNode, "Replicator");
 
         addSettingsToggle(currentNode, 'replicatorAssignGovernorTask', 'Assign governor task', 'If active, the replicator scheduler governor task will be set, the power adjustment will be enabled.')
+        addSettingsSelect(currentNode, 'replicatorWeightingMode', 'Weighting mode', 'Replicator only picks from enabled resources with the current highest valid priority (or -1 priority). After that, replicator use is split between resources of identical weighting. Setting configures how that split happens.', [
+            { val: "mass", hint: "Spends more time on resources that are easy to replicate. A resource with 2x the weighting will have roughly 2x the time spent. Based on differences in atomic mass, resources at similar weightings may have very different quantities.", label: "By atomic mass" },
+            { val: "quantity", hint: "Spends more time on resources that are hard to replicate. A resource with 2x the weighting will be focused until you have roughly 2x the amount. Resources at similar weightings will have similar quantities.", label: "By resource quantity" },
+            { val: "legacy", hint: "Legacy mode, similar to previous script behavior. Only the resource with the highest weighting is picked. If multiple resources have the same weighting then it will focus exclusively on one of those resources. This mode exists only to give you time to migrate your config to using the priority field.", label: "Legacy (deprecated)" },
+        ]);
 
         currentNode.append(`
         <table style="width:100%">
