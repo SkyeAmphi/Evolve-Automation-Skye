@@ -6561,9 +6561,9 @@
         buildings.ChthonianMineLayer.addResourceConsumption(resources.Helium_3, 8);
         buildings.ChthonianRaider.addResourceConsumption(resources.Helium_3, 18);
 
-        buildings.RuinsInfernoPower.addResourceConsumption(resources.Infernite, 5);
-        buildings.RuinsInfernoPower.addResourceConsumption(resources.Coal, 100);
-        buildings.RuinsInfernoPower.addResourceConsumption(resources.Oil, 80);
+        //buildings.RuinsInfernoPower.addResourceConsumption(resources.Infernite, 5);
+        //buildings.RuinsInfernoPower.addResourceConsumption(resources.Coal, 100);
+        //buildings.RuinsInfernoPower.addResourceConsumption(resources.Oil, 80);
 
         buildings.LakeOvenComplete.addResourceConsumption(resources.Infernite, 225);
 
