@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Evolve Skye
 // @namespace    http://tampermonkey.net/
-// @version      3.3.1.136
+// @version      3.3.1.137
 // @description  try to take over the world!
 // @downloadURL  https://github.com/SkyeAmphi/Evolve-Automation-Skye/raw/refs/heads/master/evolve_automation.user.js
 // @updateURL    https://github.com/SkyeAmphi/Evolve-Automation-Skye/raw/refs/heads/master/evolve_automation.meta.js
@@ -1532,6 +1532,7 @@
 
             const noMADRace = ["sludge", "ultra_sludge"];
             const noGenusRace = ["custom", "junker", "sludge", "ultra_sludge", "hybrid"];
+            const noGreatnessGenus = ["hybrid"];
             const challengeRace = ["junker", "sludge", "ultra_sludge"];
             const greatnessReset = ["bioseed", "ascension", "terraform", "matrix", "retire", "eden"];
             const midTierReset = ["bioseed", "cataclysm", "whitehole", "vacuum", "terraform"];
@@ -1581,7 +1582,9 @@
 
             // Check greatness\extinction achievement
             if (greatnessReset.includes(settings.prestigeType)) {
-                checkAchievement(100, "genus_" + this.genus);
+                if (!noGreatnessGenus.includes(this.genus)) {
+                    checkAchievement(100, "genus_" + this.genus);
+                }
             } else if (!noMADRace.includes(this.id) || settings.prestigeType !== "mad") {
                 checkAchievement(100, "extinct_" + this.id);
             }
@@ -2020,9 +2023,10 @@
               .map(([id, race]) => ({id: id, genus: race.type}))[0] ?? {};
             this.source = ownerRace.id ?? specialRaceTraits[traitName] ?? "";
             this.racesThatCanGain = (Object.entries(game.races)
-              .filter(([id, race]) => race?.type === ownerRace.genus)
-              .map(([id, race]) => id))
-              .flat();
+            .filter(([id, race]) => id == ownerRace.id || (race?.type == 'hybrid' ? race?.hybrid?.includes(ownerRace.genus) : race?.type === ownerRace.genus))
+            .map(([id, race]) => id))
+            .flat();
+
             this.genus = this.source === 'reindeer' ? 'herbivore' : ownerRace.genus;
         }
 
@@ -2326,7 +2330,7 @@
         Meditator: new BasicJob("meditator", "Meditator", {smart: true}),
         Hunter: new BasicJob("hunter", "Hunter", {serve: true, smart: true}),
         Farmer: new BasicJob("farmer", "Farmer", {serve: true, smart: true}),
-        //Forager: new BasicJob("forager", "Forager", {serve: true}),
+        Forager: new BasicJob("forager", "Forager", {serve: true, split: true}),
         Lumberjack: new BasicJob("lumberjack", "Lumberjack", {serve: true, split: true, smart: true}),
         QuarryWorker: new BasicJob("quarry_worker", "Quarry Worker", {serve: true, split: true, smart: true}),
         CrystalMiner: new BasicJob("crystal_miner", "Crystal Miner", {serve: true, split: true, smart: true}),
@@ -7365,6 +7369,8 @@
             jobScalePop: true,
             psychicPower: "auto",
             psychicBoostRes: "auto",
+            wishMinor: "none",
+            wishMajor: "none",
 
             autoGenetics: false,
             geneticsSequence: "none",
@@ -7380,6 +7386,11 @@
             def['mTrait_p_' + id] = i; // priority
             def['mTrait_w_' + id] = 1; // weighting
         }
+
+        Object.values(ocularPowerData).forEach(v => {
+            def['ocularPower_' + v.id] = true;
+            def['ocularPower_p_' + v.id] = 100;
+        });
 
         applySettings(def, reset);
         MinorTraitManager.sortByPriority();
@@ -7429,6 +7440,7 @@
             jobCrystalWeighting: 50,
             jobScavengerWeighting: 5,
             jobRaiderWeighting: 20,
+            jobForagerWeighting: 50,
             jobDisableMiners: true,
         }
 
@@ -7454,7 +7466,7 @@
         setBreakpoints(jobs.Meditator, -1, -1, -1);
         setBreakpoints(jobs.Hunter, -1, -1, -1);
         setBreakpoints(jobs.Farmer, -1, -1, -1);
-        //setBreakpoints(jobs.Forager, 4, 10, 0);
+        setBreakpoints(jobs.Forager, 4, 10, 0);
         setBreakpoints(jobs.Lumberjack, 4, 10, 0);
         setBreakpoints(jobs.QuarryWorker, 4, 10, 0);
         setBreakpoints(jobs.CrystalMiner, 2, 5, 0);
@@ -8927,6 +8939,7 @@
         let quarryWorkerIndex = jobList.indexOf(jobs.QuarryWorker);
         let crystalMinerIndex = jobList.indexOf(jobs.CrystalMiner);
         let scavengerIndex = jobList.indexOf(jobs.Scavenger);
+        let foragerIndex = jobList.indexOf(jobs.Forager);
         let defaultIndex = jobList.findIndex(job => job.isDefault());
 
         let availableWorkers = jobList.reduce((total, job) => total + job.workers, 0);
@@ -9397,6 +9410,7 @@
         if (quarryWorkerIndex !== -1 && settings.jobQuarryWeighting > 0) splitJobs.push({index: quarryWorkerIndex, job: jobs.QuarryWorker, weighting: settings.jobQuarryWeighting});
         if (crystalMinerIndex !== -1 && settings.jobCrystalWeighting > 0) splitJobs.push({index: crystalMinerIndex, job: jobs.CrystalMiner, weighting: settings.jobCrystalWeighting});
         if (scavengerIndex !== -1 && settings.jobScavengerWeighting > 0) splitJobs.push({index: scavengerIndex, job: jobs.Scavenger, weighting: settings.jobScavengerWeighting});
+        if (foragerIndex !== -1 && settings.jobForagerWeighting > 0) splitJobs.push({index: foragerIndex, job: jobs.Forager, weighting: settings.jobForagerWeighting});
 
         // Balance lumberjacks, quarry workers, crystal miners and scavengers if they are unlocked
         if (splitJobs.length > 0) {
@@ -9481,10 +9495,9 @@
         // After reassignments adjust default job to something with workers, we need that for sacrifices.
         // Meditators not allowed to be default, to prevent other jobs from pulling them. That's a double-edged sword: while single extra meditator should still cover natural growth of population, it's now vulnerable to massive spikes of homelessnes.
         if (!craftOnly && settings.jobSetDefault) {
-            /*if (jobs.Forager.isManaged() && requiredWorkers[jobList.indexOf(jobs.Forager)] > 0) {
+            if (jobs.Forager.isManaged() && requiredWorkers[foragerIndex] > 0) {
                 jobs.Forager.setAsDefault();
-            } else*/
-            if (jobs.QuarryWorker.isManaged() && requiredWorkers[quarryWorkerIndex] > 0) {
+            } else if (jobs.QuarryWorker.isManaged() && requiredWorkers[quarryWorkerIndex] > 0) {
                 jobs.QuarryWorker.setAsDefault();
             } else if (jobs.Lumberjack.isManaged() && requiredWorkers[lumberjackIndex] > 0) {
                 jobs.Lumberjack.setAsDefault();
@@ -10697,6 +10710,87 @@
         }
     }
 
+    const ocularPowerData = [
+        { key: "d", id: "disintegration", locParam: ["X"] },
+        { key: "p", id: "petrification", locParam: [resources.Stone.name] },
+        { key: "w", id: "wound", locParam: ["X"] },
+        { key: "t", id: "telekinesis", locParam: ["X"] },
+        { key: "f", id: "fear", locParam: undefined },
+        { key: "c", id: "charm", locParam: ["X"] },
+    ];
+
+    function autoOcularPowers() {
+        if (!game.global.race['ocular_power'] || !game.global.race['ocularPowerConfig']) {
+            return false;
+        }
+
+        const vue = getVueById("ocularPower");
+        if (!vue) return false;
+
+        let powerCap = traitVal('ocular_power', 0);
+        if (powerCap < 1) return false;
+
+        let allPowers = ocularPowerData.map((p) => {
+            return {
+                key: p.key,
+                id: p.id,
+                enabled: Boolean(settings[`ocularPower_${p.id}`]),
+                priority: Number(settings[`ocularPower_p_${p.id}`]),
+            }
+        }).sort((a, b) => b.priority - a.priority);
+        let enabledPowers = 0;
+        allPowers.forEach(p => {
+            let enable = p.enabled && (enabledPowers < powerCap);
+            if (enable) enabledPowers++;
+
+            if (vue[p.key] !== enable) {
+                document.getElementById(`ocular${p.id}`).querySelector("input").click();
+            }
+        });
+    }
+
+    const wishData = {
+        minor: [
+            { id: "Know", loc: "resource_Knowledge_name" },
+            { id: "Money", loc: "resource_Money_name" },
+            { id: "Res", loc: "wish_resources" },
+            { id: "Love", loc: "wish_love" },
+            { id: "Excite", loc: "wish_event" },
+            { id: "Fame", loc: "wish_fame" },
+            { id: "Strength", loc: "wish_strength" },
+            { id: "Influence", loc: "wish_influence" },
+        ],
+        major: [
+            { id: "BigMoney", loc: "wish_big_money" },
+            { id: "BigRes", loc: "wish_big_resources" },
+            { id: "Plasmid", loc: "wish_plasmid" },
+            { id: "Power", loc: "wish_power" },
+            { id: "Adoration", loc: "wish_adoration" },
+            { id: "Thrill", loc: "wish_thrill" },
+            { id: "Peace", loc: "wish_peace" },
+            { id: "Greatness", loc: "wish_greatness" },
+        ],
+    };
+    function autoWish() {
+        if (!game.global.race['wish'] || !game.global.tech['wish']) {
+            return false;
+        }
+
+        if (game.global.race.wishStats.minor === 0 && settings.wishMinor !== "none") {
+            const vueMinor = getVueById("minorWish");
+            if (!vueMinor) return false;
+
+            $(`#wish${settings.wishMinor}`).click();
+        }
+
+        if (game.global.tech['wish'] >= 2 && game.global.race.wishStats.major === 0 && settings.wishMajor !== "none") {
+            const vueMajor = getVueById("majorWish");
+            if (!vueMajor) return false;
+
+            $(`#wish${settings.wishMajor}`).click();
+        }
+    }
+
     function autoGenetics() {
         let genetics = game.global.tech.genetics;
         let mutations = game.global.race.mutation;
@@ -11453,7 +11547,7 @@
                     if ((buildings.ChthonianRaider.stateOnCount === 0 && buildings.ChthonianExcavator.stateOnCount === 0) || buildings.GatewayStarbase.stateOnCount === 0) {
                         maxStateOn = 0;
                     } else {
-                        let mineAdjust = ((game.global.race['instinct'] ? 7000 : 7500) - poly.piracy("gxy_chthonian")) / game.actions.galaxy.gxy_chthonian.minelayer.ship.rating();
+                        let mineAdjust = (((game.global.race['instinct'] ? 7000 : 7500) * getPiracyMultiplier()) - poly.piracy("gxy_chthonian")) / game.actions.galaxy.gxy_chthonian.minelayer.ship.rating();
                         maxStateOn = Math.min(maxStateOn, currentStateOn + Math.ceil(mineAdjust));
                     }
                 }
@@ -12370,6 +12464,12 @@
         }
     }
 
+    function getPiracyMultiplier() {
+        return 1 *
+            (game.global.race.chicken ? traitVal('chicken', 1, '+') : 1) *
+            (game.global.race['ocular_power'] && game.global.race?.ocularPowerConfig?.f ? 1 - (traitVal('ocular_power', 1) / 500) : 1)
+    }
+
     function autoFleet() {
         if (!FleetManager.initFleet()) {
             return;
@@ -12393,6 +12493,13 @@
             {name: "dreadnought", count: 0, power: game.actions.galaxy.gxy_gateway.dreadnought.ship.rating()},
         ];
         let minPower = allFleets[0].power;
+
+        const piracyMultiplier = getPiracyMultiplier();
+        if (piracyMultiplier !== 1) {
+            allRegions.forEach(region => {
+                region.piracy *= piracyMultiplier;
+            });
+        }
 
         // We can't rely on stateOnCount - it won't give us correct number of ships of some of them missing crew
         let fleetIndex = Object.fromEntries(allFleets.map((ship, index) => [ship.name, index]));
@@ -14021,6 +14128,8 @@
         if (settings.autoMinorTrait) {
             autoShapeshift(); // Shifting genus can remove techs, buildings, resources, etc. Leaving broken preloaded buttons behind. This thing need to be at the very end, to prevent clicking anything before redrawing tabs
             autoPsychic();
+            autoOcularPowers();
+            autoWish();
         }
         if (settings.autoMutateTraits) {
             autoMutateTrait();
@@ -17265,7 +17374,40 @@
                              ...Object.values(resources).filter(r => r.atomicMass > 0).map(r => ({val: r.id, label: r.title}))];
         addSettingsSelect(currentNode, "psychicBoostRes", "Boosted Resource", "Resource for Boost Resource Production psychic power.", psychicBoost);
 
+        let wishMinor = [{ val: "none", label: "None", hint: "Disable using minor wishes." },
+            ...wishData.minor.map(w => ({ val: w.id, label: game.loc('wish_for', [game.loc(w.loc)]) }))];
+        addSettingsSelect(currentNode, "wishMinor", "Minor Wish", "Uses this minor wish when available.", wishMinor);
+        let wishMajor = [{ val: "none", label: "None", hint: "Disable using major wishes." },
+            ...wishData.major.map(w => ({ val: w.id, label: game.loc('wish_for', [game.loc(w.loc)]) }))];
+        addSettingsSelect(currentNode, "wishMajor", "Major Wish", "Uses this major wish when available.", wishMajor);
+
         addSettingsToggle(currentNode, "jobScalePop", "High Pop job scale", "Auto Job will automatically scaly breakpoints to match population increase");
+
+        addStandardHeading(currentNode, "Ocular Powers");
+        currentNode.append(`
+          <table style="width:100%">
+            <tr>
+              <th class="has-text-warning" style="width:50%">Name</th>
+              <th class="has-text-warning" style="width:25%">Enabled</th>
+              <th class="has-text-warning" style="width:25%">Priority</th>
+            </tr>
+            <tbody id="script_ocularPowersTableBody"></tbody>
+          </table>
+        `);
+        const ocularTableBodyNode = $("#script_ocularPowersTableBody");
+        ocularPowerData.forEach(p => {
+            let tr = $(`<tr><td></td><td></td><td></td></tr>`);
+            tr.appendTo(ocularTableBodyNode);
+
+            let ocularPowerElement = tr.find("td").first();
+            ocularPowerElement.append(buildTableLabel(game.loc(`ocular_${p.id}`), game.loc(`ocular_${p.id}_desc`, p.locParam)));
+
+            ocularPowerElement = ocularPowerElement.next();
+            addTableToggle(ocularPowerElement, `ocularPower_${p.id}`);
+
+            ocularPowerElement = ocularPowerElement.next();
+            addTableInput(ocularPowerElement, `ocularPower_p_${p.id}`);
+        });
 
         // Minor Traits
         addStandardHeading(currentNode, "Minor Traits");
@@ -17857,6 +17999,7 @@
         addSettingsNumber(currentNode, "jobCrystalWeighting", "Final Crystal Miner Weighting", "AFTER allocating breakpoints this weighting will be used to split weighted jobs");
         addSettingsNumber(currentNode, "jobScavengerWeighting", "Final Scavenger Weighting", "AFTER allocating breakpoints this weighting will be used to split weighted jobs");
         addSettingsNumber(currentNode, "jobRaiderWeighting", "Final Raider Weighting", "AFTER allocating breakpoints this weighting will be used to split weighted jobs");
+        addSettingsNumber(currentNode, "jobForagerWeighting", "Final Forager Weighting", "AFTER allocating breakpoints this weighting will be used to split weighted jobs");
         addSettingsToggle(currentNode, "jobDisableMiners", "Disable miners in Andromeda", "Disable Miners and Coal Miners after reaching Andromeda");
 
         currentNode.append(`
@@ -18684,7 +18827,7 @@
             createSettingToggle(togglesNode, 'autoMiningDroid', 'Manages mining droid production.');
             createSettingToggle(togglesNode, 'autoGraphenePlant', 'Manages graphene plant. Not user configurable - just uses least demanded resource for fuel.');
             createSettingToggle(togglesNode, 'autoGenetics', 'Managed genetics settings, and automatically assembles genes more optimally than ingame sequencer');
-            createSettingToggle(togglesNode, 'autoMinorTrait', 'Purchase minor traits using genes according to their weighting settings. Also manages Mimic genus, and Psychic powers.');
+            createSettingToggle(togglesNode, 'autoMinorTrait', 'Purchase minor traits using genes according to their weighting settings. Also manages Mimic genus, Psychic powers, Ocular powers and wishes.');
             createSettingToggle(togglesNode, 'autoMutateTraits', 'Mutate in or out major and genus traits. WARNING: This will spend Plasmids and Anti-Plasmids.');
             createSettingToggle(togglesNode, 'autoEject', 'Eject excess resources to black hole. Normal resources ejected when they close to storage cap, craftables - when above requirements. Disabled when Mass Ejector Optimizer governor task is active.', createEjectToggles, removeEjectToggles);
             createSettingToggle(togglesNode, 'autoSupply', 'Send excess resources to Spire. Normal resources sent when they close to storage cap, craftables - when above requirements. Takes priority over ejector.', createSupplyToggles, removeSupplyToggles);
@@ -19459,9 +19602,9 @@
         // export universeAffix(universe) from achieve.js
         universeAffix: function(e){switch(e=e||game.global.race.universe){case"evil":return"e";case"antimatter":return"a";case"heavy":return"h";case"micro":return"m";case"magic":return"mg";default:return"l"}},
         // export const genus_traits from races.js (added spores:1 to fungi manually)
-        genus_traits: {humanoid:{adaptable:1,wasteful:1},carnivore:{carnivore:1,beast:1,cautious:1},herbivore:{herbivore:1,instinct:1},small:{small:1,weak:1},giant:{large:1,strong:1},reptilian:{cold_blooded:1,scales:1},avian:{flier:1,hollow_bones:1,sky_lover:1},insectoid:{high_pop:1,fast_growth:1,high_metabolism:1},plant:{sappy:1,asymmetrical:1},fungi:{detritivore:1,spongy:1,spores:1},aquatic:{submerged:1,low_light:1},fey:{elusive:1,iron_allergy:1},heat:{smoldering:1,cold_intolerance:1},polar:{chilled:1,heat_intolerance:1},sand:{scavenger:1,nomadic:1},demonic:{immoral:1,evil:1,soul_eater:1},angelic:{blissful:1,pompous:1,holy:1},synthetic:{artifical:1,powered:1},eldritch:{psychic:1,tormented:1,darkness:1,unfathomable:1}},
+        genus_traits: {humanoid:{adaptable:1,wasteful:1},carnivore:{carnivore:1,beast:1,cautious:1},herbivore:{herbivore:1,instinct:1},small:{small:1,weak:1},giant:{large:1,strong:1},reptilian:{cold_blooded:1,scales:1},avian:{flier:1,hollow_bones:1,sky_lover:1},insectoid:{high_pop:1,fast_growth:1,high_metabolism:1},plant:{sappy:1,asymmetrical:1},fungi:{detritivore:1,spongy:1,spores:1},aquatic:{submerged:1,low_light:1},fey:{elusive:1,iron_allergy:1},heat:{smoldering:1,cold_intolerance:1},polar:{chilled:1,heat_intolerance:1},sand:{scavenger:1,nomadic:1},demonic:{immoral:1,evil:1,soul_eater:1},angelic:{blissful:1,pompous:1,holy:1},synthetic:{artifical:1,powered:1},eldritch:{psychic:1,tormented:1,darkness:1,unfathomable:1}, hybrid: {}},
         // export const neg_roll_traits from races.js
-        neg_roll_traits: ['diverse','arrogant','angry','lazy','paranoid','greedy','puny','dumb','nearsighted','gluttony','slow','hard_of_hearing','pessimistic','solitary','pyrophobia','skittish','nyctophilia','frail','atrophy','invertebrate','pathetic','invertebrate','unorganized','slow_regen','snowy','mistrustful','fragrant','freespirit','hooved','heavy','gnawer'],
+        neg_roll_traits: ['angry','arrogant','atrophy','diverse','dumb','fragrant','frail','freespirit','gluttony','gnawer','greedy','hard_of_hearing','heavy','hooved','invertebrate','lazy','mistrustful','nearsighted','nyctophilia','paranoid','pathetic','pessimistic','puny','pyrophobia','skittish','slow','slow_regen','snowy','solitary','unorganized'],
 
     // Reimplemented:
         // export function crateValue() from resources.js
