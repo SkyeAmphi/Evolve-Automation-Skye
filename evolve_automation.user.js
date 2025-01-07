@@ -11312,7 +11312,7 @@
         }
 
         // Don't use Dark Bomb if not enabled
-        if (itemId === "tech-dark_bomb" && (!settings.prestigeDemonicBomb || settings.prestigeType !== "demonic")) {
+        if (itemId === "tech-dark_bomb" && (!settings.prestigeDemonicBomb || settings.prestigeType !== "infusion")) {
             return "Dark Bomb disabled";
         }
 
