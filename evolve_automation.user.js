@@ -2394,7 +2394,7 @@
         Mill: new Action("Windmill", "city", "mill", "", {smart: true}),
         Windmill: new Action("Windmill (Evil)", "city", "windmill", ""),
         Silo: new Action("Grain Silo", "city", "silo", ""),
-        Assembly: new ResourceAction("Assembly", "city", "assembly", "", "Population", {housing: true, important: true}),
+        Assembly: new ResourceAction("Assembly", "city", "assembly", "", "Population", {housing: true, important: true, multiSegmented: true}),
         Barracks: new Action("Barracks", "city", "garrison", "", {garrison: true}),
         Hospital: new Action("Hospital", "city", "hospital", ""),
         BootCamp: new Action("Boot Camp", "city", "boot_camp", ""),
