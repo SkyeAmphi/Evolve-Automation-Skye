@@ -2704,7 +2704,7 @@
         SiriusAscensionMachine: new Action("Sirius Ascension Machine", "interstellar", "ascension_machine", "int_sirius", {multiSegmented: true}),
         SiriusAscensionTrigger: new Action("Sirius Ascension Machine (Complete)", "interstellar", "ascension_trigger", "int_sirius", {smart: true}),
         SiriusAscend: new Action("Sirius Ascend", "interstellar", "ascend", "int_sirius", {prestige: true}),
-        SiriusThermalCollector: new Action("Sirius Thermal Collector", "interstellar", "thermal_collector", "int_sirius"),
+        SiriusThermalCollector: new Action("Sirius Thermal Collector", "interstellar", "thermal_collector", "int_sirius", {multiSegmented: true}),
 
         GatewayMission: new Action("Gateway Mission", "galaxy", "gateway_mission", "gxy_gateway"),
         GatewayStarbase: new Action("Gateway Starbase", "galaxy", "starbase", "gxy_gateway", {garrison: true}),
@@ -6700,6 +6700,7 @@
         buildings.ProximaDysonSphere.overridePowered = -5;
         buildings.ProximaOrichalcumSphere.overridePowered = -8;
         buildings.ProximaElysaniteSphere.overridePowered = -18;
+        buildings.RuinsHellForge.overridePowered = 0;
         // Numbers aren't exactly correct. That's fine - it won't mess with calculations - it's not something we can turn off and on. We just need to know that they *are* power generators, for autobuild, and that's enough for us.
         // And it doesn't includes Stellar Engine at all. It can generate some power... But only when fully built, and you don't want to build 100 levels of engine just to generate 20MW.
     }
