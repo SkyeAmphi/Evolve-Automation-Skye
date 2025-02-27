@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Evolve Skye
 // @namespace    http://tampermonkey.net/
-// @version      3.3.1.140
+// @version      3.3.1.141
 // @description  try to take over the world!
 // @downloadURL  https://github.com/SkyeAmphi/Evolve-Automation-Skye/raw/refs/heads/master/evolve_automation.user.js
 // @updateURL    https://github.com/SkyeAmphi/Evolve-Automation-Skye/raw/refs/heads/master/evolve_automation.meta.js
@@ -13771,9 +13771,9 @@
         let strings = settingsRaw.logFilter.split(/[^0-9a-z_%]/g).filter(Boolean);
         for (let i = 0; i < strings.length; i++) {
             let [id, ...params] = strings[i].split("%");
-            params = params.map(game.loc);
+            params = params.map(poly.loc);
             // Loot message built from multiple strings without tokens, let's fake one for regexp below
-            let message = game.loc(id, params.length ? params : undefined) + (id === "civics_garrison_gained" ? "%0" : "");
+            let message = poly.loc(id, params.length ? params : undefined) + (id === "civics_garrison_gained" ? "%0" : "");
             if (message === id) {
                 continue;
             }
@@ -15035,6 +15035,9 @@
     }
 
     const argType = {
+        building_cost: {def: "city-farm.Money", arg: "list_cb", options: () =>
+          Object.fromEntries(Object.keys(buildingIds).map(b => Object.keys(buildingIds[b].cost)
+            .map(r => [`${b}.${r}`, {name: `${buildingIds[b].name} (${resources[r].name})`, id: `${b}.${r}`}])).flat())},
         building: {def: "city-farm", arg: "list", options: {list: buildingIds, name: "name", id: "_vueBinding"}},
         research: {def: "tech-mad", arg: "list", options: {list: techIds, name: "name", id: "_vueBinding"}},
 
@@ -15157,6 +15160,7 @@
         SettingDefault: { fn: (s) => settingsRaw[s], arg: "string", def: "masterScriptToggle", desc: "Returns default value of setting, types varies" },
         SettingCurrent: { fn: (s) => settings[s], arg: "string", def: "masterScriptToggle", desc: "Returns current value of setting, types varies" },
         Eval: { fn: (s) => fastEval(s), arg: "string", def: "Math.PI", desc: "Returns result of evaluating code" },
+        BuildingCost: { fn: (id) => { let [b, r] = id.split("."); return buildingIds[b].cost[r] ?? 0; }, ...argType.building_cost, desc: "Return material cost of building as number\n(Due to technical limitations some options might not appear in list until you unlock corresponding building in game)" },
         BuildingUnlocked: { fn: (b) => buildingIds[b].isUnlocked(), ...argType.building, desc: "Return true when building is unlocked" },
         BuildingClickable: { fn: (b) => buildingIds[b].isClickable(), ...argType.building, desc: "Return true when building have all required resources, and can be purchased" },
         BuildingAffordable: { fn: (b) => buildingIds[b].isAffordable(true), ...argType.building, desc: "Return true when building is affordable, i.e. costs of all resources below storage caps" },
@@ -17471,10 +17475,10 @@
         addSettingsSelect(currentNode, "psychicBoostRes", "Boosted Resource", "Resource for Boost Resource Production psychic power.", psychicBoost);
 
         let wishMinor = [{ val: "none", label: "None", hint: "Disable using minor wishes." },
-            ...wishData.minor.map(w => ({ val: w.id, label: game.loc('wish_for', [game.loc(w.loc)]) }))];
+            ...wishData.minor.map(w => ({ val: w.id, label: poly.loc('wish_for', [poly.loc(w.loc)]) }))];
         addSettingsSelect(currentNode, "wishMinor", "Minor Wish", "Uses this minor wish when available.", wishMinor);
         let wishMajor = [{ val: "none", label: "None", hint: "Disable using major wishes." },
-            ...wishData.major.map(w => ({ val: w.id, label: game.loc('wish_for', [game.loc(w.loc)]) }))];
+            ...wishData.major.map(w => ({ val: w.id, label: poly.loc('wish_for', [poly.loc(w.loc)]) }))];
         addSettingsSelect(currentNode, "wishMajor", "Major Wish", "Uses this major wish when available.", wishMajor);
 
         addSettingsToggle(currentNode, "jobScalePop", "High Pop job scale", "Auto Job will automatically scaly breakpoints to match population increase");
