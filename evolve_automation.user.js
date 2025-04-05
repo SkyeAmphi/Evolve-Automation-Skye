@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Evolve Skye
 // @namespace    http://tampermonkey.net/
-// @version      3.3.1.142
+// @version      3.3.1.143
 // @description  try to take over the world!
 // @downloadURL  https://github.com/SkyeAmphi/Evolve-Automation-Skye/raw/refs/heads/master/evolve_automation.user.js
 // @updateURL    https://github.com/SkyeAmphi/Evolve-Automation-Skye/raw/refs/heads/master/evolve_automation.meta.js
@@ -1541,11 +1541,11 @@
     class Race {
         constructor(id) {
             this.id = id;
-            this.evolutionTree = [];
+            this.evolutionTree = {};
         }
 
         get name() {
-            return game.races[this.id].name ?? "Custom";
+            return game.races[this.id].name ?? `Custom (${this.id} slot)`;
         }
 
         get desc() {
@@ -1815,7 +1815,7 @@
                 case "ultra_sludge":
                     return "Ultra Failed Experiment unlocked.";
                 case "custom":
-                    return game.loc('wiki_achieve_ascended');
+                    return `Complete an Ascension reset and be on a suitable planet for your chosen genus (${this.genus ? game.loc('genelab_genus_' + this.genus) : 'not set'}).`;
                 case "hybrid":
                     return "???";
             }
@@ -5070,17 +5070,19 @@
         getHellReservedSoldiers(){
             let soldiers = 0;
 
+            const soldierRating = game.armyRating(1, "hellArmy");
+
             // Assign soldiers to assault forge once other requirements are met
-            if (settings.autoBuild && buildings.PitAssaultForge.isAutoBuildable()) {
+            if (settings.autoBuild && buildings.PitAssaultForge.isAutoBuildable() && soldierRating > 0) {
                 if (settings.hellAssaultReserve || !Object.entries(buildings.PitAssaultForge.cost).find(([id, amount]) => resources[id].currentQuantity < amount)) {
-                    soldiers = Math.round(650 / game.armyRating(1, "hellArmy"));
+                    soldiers = Math.round(650 / soldierRating);
                 }
             }
 
             // Reserve soldiers operating forge
-            if (buildings.PitSoulForge.stateOnCount > 0) {
+            if (buildings.PitSoulForge.stateOnCount > 0 && soldierRating  > 0) {
                 // export function soulForgeSoldiers() from portal.js
-                soldiers = Math.round(650 / game.armyRating(1, "hellArmy"));
+                soldiers = Math.round(650 / soldierRating);
                 if (game.global.portal.gun_emplacement) {
                     soldiers -= game.global.portal.gun_emplacement.on * (game.global.tech.hell_gun >= 2 ? 2 : 1);
                     if (soldiers < 0){
@@ -19776,7 +19778,7 @@
         // export function hellSupression(area, val) from portal.js
         hellSupression: function(t,e){switch(t){case"ruins":{let t=e||buildings.RuinsGuardPost.stateOnCount,r=75*buildings.RuinsArcology.stateOnCount,a=game.armyRating(t*traitVal('high_pop', 0, 1),"hellArmy",0);a*=traitVal('holy', 1, '+');let l=(a+r)/5e3;return{supress:l>1?1:l,rating:a+r}}case"gate":{let t=poly.hellSupression("ruins",e),r=100*buildings.GateTurret.stateOnCount;r*=traitVal('holy', 1, '+');let a=(t.rating+r)/7500;return{supress:a>1?1:a,rating:t.rating+r}}default:return 0}},
         // function taxCap(min) from civics.js
-        taxCap: function(e){let a=(haveTech("currency",5)||game.global.race.terrifying)&&!game.global.race.noble;if(e)return a?0:traitVal("noble",0,10);{let e=traitVal("noble",1,30);return a&&(e+=20),"oligarchy"===game.global.civic.govern.type&&(e+=("bureaucrat"===getGovernor()?25:20)),"noble"===getGovernor()&&(e+=20),e}},
+        taxCap: function(e){let a=(haveTech("currency",5)||game.global.race.terrifying)&&!game.global.race.noble;if(e)return a?0:traitVal("noble",0,10);{let e=traitVal("noble",1,30);return a&&(e+=20),"oligarchy"===game.global.civic.govern.type&&(e+=("bureaucrat"===getGovernor()?25:20)),"noble"===getGovernor()&&(e+=20),(game.global.race['wish'] && game.global.race['wishStats'])&&(e+=game.global.race.wishStats.tax),e}},
         // export function mechCost(size,infernal) from portal.js
         mechCost: function(e,a,x){let l=9999,r=1e7;switch(e){case"small":{let e=(x??game.global.blood.prepared)>=2?5e4:75e3;r=a?2.5*e:e,l=a?20:1}break;case"medium":r=a?45e4:18e4,l=a?100:4;break;case"large":r=a?925e3:375e3,l=a?500:20;break;case"titan":r=a?15e5:75e4,l=a?1500:75;break;case"collector":{let e=(x??game.global.blood.prepared)>=2?8e3:1e4;r=a?2.5*e:e,l=1}}return{s:l,c:r}},
         // function terrainRating(mech,rating,effects) from portal.js
