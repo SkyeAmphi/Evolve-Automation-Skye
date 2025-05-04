@@ -1620,7 +1620,7 @@
                 let imitateUnlocked = game.global.stats?.synth?.[this.id] ?? false;
                 if (!noImitates.includes(this.id) && !imitateUnlocked) {
                     weighting += 10000;
-                    goals.push("evo_imitate");
+                    goals.push("feat_planned_obsolescence_name");
                     if (goodImitates.includes(this.id)) {
                         weighting += ((goodImitates.length - 1) - goodImitates.indexOf(this.id)) * 5000;
                     }
@@ -2171,8 +2171,8 @@
         [{id:"orbit_decay", trait:"orbit_decay"}],
         //[{id:"nonstandard", trait:"nonstandard"}],
         [{id:"gravity_well", trait:"gravity_well"},
-         {id:"witch_hunter", trait:"witch_hunter"}],
-        //[{id:"warlord", trait:"warlord"}],
+         {id:"witch_hunter", trait:"witch_hunter"},
+         {id:"warlord", trait:"warlord"}],
         //[{id:"storage_wars", trait:"storage_wars"}],
         [{id:"junker", trait:"junker"}],
         [{id:"cataclysm", trait:"cataclysm"}],
@@ -4504,7 +4504,8 @@
 
     var GovernmentManager = {
         Types: {
-            anarchy: {id: "anarchy", isUnlocked: () => false}, // Special - should not be shown to player
+            anarchy: {id: "anarchy", isUnlocked: () => false, selectable: false},
+            dictator: {id: "dictator", isUnlocked: () => false, selectable: false},
             autocracy: {id: "autocracy", isUnlocked: () => true},
             democracy: {id: "democracy", isUnlocked: () => true},
             oligarchy: {id: "oligarchy", isUnlocked: () => true},
@@ -6874,8 +6875,8 @@
 
         priorityList.push(buildings.AlphaMission);
         priorityList.push(buildings.AlphaStarport);
-        priorityList.push(buildings.AlphaFusion);
         priorityList.push(buildings.AlphaHabitat);
+        priorityList.push(buildings.AlphaFusion);
         priorityList.push(buildings.AlphaLuxuryCondo);
         priorityList.push(buildings.AlphaMiningDroid);
         priorityList.push(buildings.AlphaProcessing);
@@ -11496,6 +11497,7 @@
 
         // Calculate the available power / resource rates of change that we have to work with
         let availablePower = resources.Power.currentQuantity;
+        let missingProducer = {};
 
         for (let i = 0; i < buildingList.length; i++) {
             let building = buildingList[i];
@@ -11510,6 +11512,10 @@
                     resources.Belt_Support.rateOfChange -= resources.Belt_Support.maxQuantity;
                 } else {
                     resourceType.resource.rateOfChange += building.getFuelRate(j) * building.stateOnCount;
+                }
+
+                if (resourceType.resource instanceof Support && resourceType.rate < 0) {
+                    missingProducer[resourceType.resource.id] = (missingProducer[resourceType.resource.id] ?? 0) + 1;
                 }
             }
         }
@@ -11539,7 +11545,7 @@
                         maxStateOn--;
                     }
                 }
-            } else if (building.powered > 0) {
+            } else if (building.powered > 0 && building !== buildings.RuinsHellForge) {
                 maxStateOn = Math.min(maxStateOn, availablePower / building.powered);
             }
 
@@ -11883,6 +11889,14 @@
                     }
 
                     maxStateOn = Math.min(maxStateOn, supportedAmount);
+
+                    if (missingProducer[resourceType.resource.id]) {
+                        building.extraDescription = `Make sure all ${resourceType.resource.title} producers are above consumers in buildings list!<br>${building.extraDescription}`;
+                    }
+                } else {
+                    if (missingProducer[resourceType.resource.id] && resourceType.rate < 0) {
+                        missingProducer[resourceType.resource.id] -= 1;
+                    }
                 }
             }
 
@@ -16011,7 +16025,7 @@
         addSettingsNumber(currentNode, "generalMinimumMorale", "Minimum allowed morale", "Use this to set a minimum allowed morale. Remember that less than 100% can cause riots and weather can cause sudden swings");
         addSettingsNumber(currentNode, "generalMaximumMorale", "Maximum allowed morale", "Use this to set a maximum allowed morale. The tax rate will be raised to lower morale to this maximum");
 
-        let governmentOptions = [{val: "none", label: "None", hint: "Do not select government"}, ...Object.keys(GovernmentManager.Types).filter(id => id !== "anarchy").map(id => ({val: id, label: game.loc(`govern_${id}`), hint: game.loc(`govern_${id}_desc`)}))];
+        let governmentOptions = [{val: "none", label: "None", hint: "Do not select government"}, ...Object.values(GovernmentManager.Types).filter(g => g.selectable !== false).map(g => ({val: g.id, label: game.loc(`govern_${g.id}`), hint: game.loc(`govern_${g.id}_desc`)}))];
         addSettingsSelect(currentNode, "govInterim", "Interim Government", "Temporary low tier government until you research other governments", governmentOptions);
         addSettingsSelect(currentNode, "govFinal", "Second Government", "Second government choice, chosen once becomes available. Can be the same as above", governmentOptions);
         addSettingsSelect(currentNode, "govSpace", "Space Government", "Government for bioseed+. Chosen once you researched Quantum Manufacturing. Can be the same as above", governmentOptions);
