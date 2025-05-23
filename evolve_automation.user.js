@@ -1208,6 +1208,61 @@
         }
     }
 
+    
+    class RedirectAction extends Action {
+        constructor(name, tab, id, location, flags) {
+            super(name, tab, id, location, flags);
+            //save original binding for later
+            this._originalBinding = this._tab + "-" + this._id;
+            this._cityBinding = "city-" + this._id;
+        }
+
+        // Dynamically find the action's data in any plausible location
+        findActionContainer() {
+            // Try tab/location/id in game.global
+            if (this._tab && game.global[this._tab]) {
+                if (this._location && game.global[this._tab][this._location]?.[this._id])
+                    return game.global[this._tab][this._location];
+                if (game.global[this._tab][this._id])
+                    return game.global[this._tab];
+            }
+            // Try city
+            if (game.global.city?.[this._id])
+                return game.global.city;
+            // Try all top-level containers
+            for (const key of Object.keys(game.global)) {
+                if (game.global[key]?.[this._id])
+                    return game.global[key];
+            }
+            return null;
+        }
+
+        isUnlocked() {
+            // Robustly check if the action exists and is visible/unlocked in any plausible container.
+            const container = this.findActionContainer();
+            if (!container) return false;
+            const instance = container[this._id];
+            // Check for a display property, or fallback to existence and count/visibility
+            if (instance && typeof instance === "object") {
+            if ("display" in instance) return !!instance.display;
+            if ("count" in instance) return true;
+            if ("on" in instance) return true;
+            }
+            // Fallback: check if a Vue binding exists for this action
+            return !!getVueById(this._cityBinding) || !!getVueById(this._vueBinding);
+        }
+
+        get vue() {
+            // Prefer city binding, fallback to default
+            return getVueById(this._cityBinding) || getVueById(this._vueBinding);
+        }
+
+        get instance() {
+            const container = this.findActionContainer();
+            return container ? container[this._id] : undefined;
+        }
+    }
+
     class Pillar extends Action {
         get count() {
             return this.isUnlocked() ? this.definition.count() : 0;
@@ -2792,9 +2847,9 @@
         WastelandDigDemon: new Action("Wasteland Dig Demon Burrow (Warlord)", "portal", "dig_demon", "prtl_wasteland"),
         WastelandTunneler: new Action("Wasteland Tunneler Demon (Warlord)", "portal", "tunneler", "prtl_wasteland"),
         WastelandBrute: new Action("Wasteland Brute Hut (Warlord)", "portal", "brute", "prtl_wasteland", {garrison: true}),
-        WastelandAltar: new Action("Wasteland Sacrificial Altar (Warlord)", "portal", "s_alter", "prtl_wasteland"),
-        WastelandShrine: new Action("Wasteland Shrine (Warlord)", "portal", "shrine", "prtl_wasteland"),
-        WastelandMeditationChamber: new Action("Wasteland Meditation Chamber (Warlord)", "portal", "meditation", "prtl_wasteland"),
+        WastelandAltar: new RedirectAction("Wasteland Sacrificial Altar (Warlord)", "portal", "s_alter", "prtl_wasteland"),
+        WastelandShrine: new RedirectAction("Wasteland Shrine (Warlord)", "portal", "shrine", "prtl_wasteland"),
+        WastelandMeditationChamber: new RedirectAction("Wasteland Meditation Chamber (Warlord)", "portal", "meditation", "prtl_wasteland"),
 
         PitMission: new Action("Pit Mission", "portal", "pit_mission", "prtl_pit"),
         PitAssaultForge: new Action("Pit Assault Forge", "portal", "assault_forge", "prtl_pit"),
