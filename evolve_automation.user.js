@@ -6168,6 +6168,54 @@
             }
         },
 
+        DuplicateTrigger(seq) {
+            let indexToDuplicate = this.priorityList.findIndex(trigger => trigger.seq === seq);
+
+            if (indexToDuplicate === -1) {
+                return;
+            }
+
+            let triggerToDuplicate = this.priorityList[indexToDuplicate];
+            let trigger = new Trigger(
+                0,
+                0,
+                triggerToDuplicate.requirementType,
+                triggerToDuplicate.requirementId,
+                triggerToDuplicate.requirementCount,
+                triggerToDuplicate.actionType,
+                triggerToDuplicate.actionId,
+                triggerToDuplicate.actionCount,
+            )
+            this.priorityList.splice(indexToDuplicate, 0, trigger);
+
+            for (let i = 0; i < this.priorityList.length; i++) {
+                let trigger = this.priorityList[i];
+                trigger.seq = i;
+                trigger.priority = i;
+            }
+        },
+
+        EvalizeTrigger(seq) {
+            let indexToEval = this.priorityList.findIndex(trigger => trigger.seq === seq);
+
+            if (indexToEval === -1) {
+                return;
+            }
+
+            let trigger = this.priorityList[indexToEval];
+
+            let check = "";
+            switch (trigger.requirementType) {
+                case "Eval":
+                    check = trigger.requirementId;
+                    break;
+                default:
+                    check = `_("${trigger.requirementType}",${JSON.stringify(trigger.requirementId)})`;
+            }
+
+            win.prompt("Eval of this condition:", check);
+        },
+
         // This function only checks if two triggers use the same resource, it does not check storage
         actionConflicts(trigger) {
             for (let targetTrigger of this.targetTriggers) {
@@ -7364,7 +7412,7 @@
             buildingAlwaysClick: false,
             buildingClickPerTick: 50,
             activeTargetsUI: false,
-            displayPrestigeTypeInTopBar: false,
+            displayPrestigeTypeInTopBar: true,
             displayTotalDaysTypeInTopBar: false,
             scriptSettingsExportFilename: "evolve-script-settings.json",
             performanceHackAvoidDrawTech: false,
@@ -16488,12 +16536,11 @@
             <tr>
               <th class="has-text-warning" style="width:16%">Type</th>
               <th class="has-text-warning" style="width:18%">Value</th>
-              <th class="has-text-warning" style="width:11%" title="Numerical variables compared to this value using '>=', boolean variables - using '=='. String variables not currently supported by triggers.">Result</th>
+              <th class="has-text-warning" style="width:6%" title="Numerical variables compared to this value using '>=', boolean variables - using '=='. String variables not currently supported by triggers.">Result</th>
               <th class="has-text-warning" style="width:16%">Type</th>
               <th class="has-text-warning" style="width:18%">Id</th>
-              <th class="has-text-warning" style="width:11%">Count</th>
-              <th style="width:5%"></th>
-              <th style="width:5%"></th>
+              <th class="has-text-warning" style="width:6%">Count</th>
+              <th style="width:20%"></th>
             </tr>
             <tbody id="script_triggerTableBody"></tbody>
           </table>`);
@@ -16503,7 +16550,16 @@
 
         for (let i = 0; i < TriggerManager.priorityList.length; i++) {
             const trigger = TriggerManager.priorityList[i];
-            newTableBodyText += `<tr id="script_trigger_${trigger.seq}" value="${trigger.seq}" class="script-draggable"><td style="width:16%"></td><td style="width:18%"></td><td style="width:11%"></td><td style="width:16%"></td><td style="width:18%"></td><td style="width:11%"></td><td style="width:5%"></td><td style="width:5%"><span class="script-lastcolumn"></span></td></tr>`;
+            newTableBodyText += `
+            <tr id="script_trigger_${trigger.seq}" value="${trigger.seq}" class="script-draggable">
+              <td style="width:16%"></td>
+              <td style="width:18%"></td>
+              <td style="width:6%"></td>
+              <td style="width:16%"></td>
+              <td style="width:18%"></td>
+              <td style="width:6%"></td>
+              <td style="width:20%"></td>
+            </tr>`;
         }
         tableBodyNode.append($(newTableBodyText));
 
@@ -16545,7 +16601,16 @@
         let tableBodyNode = $('#script_triggerTableBody');
         let newTableBodyText = "";
 
-        newTableBodyText += `<tr id="script_trigger_${trigger.seq}" value="${trigger.seq}" class="script-draggable"><td style="width:16%"></td><td style="width:18%"></td><td style="width:11%"></td><td style="width:16%"></td><td style="width:18%"></td><td style="width:11%"></td><td style="width:5%"></td><td style="width:5%"><span class="script-lastcolumn"></span></td></tr>`;
+        newTableBodyText += `
+        <tr id="script_trigger_${trigger.seq}" value="${trigger.seq}" class="script-draggable">
+          <td style="width:16%"></td>
+          <td style="width:18%"></td>
+          <td style="width:6%"></td>
+          <td style="width:16%"></td>
+          <td style="width:18%"></td>
+          <td style="width:6%"></td>
+          <td style="width:20%"></td>
+        </tr>`;
 
         tableBodyNode.append($(newTableBodyText));
 
@@ -16681,12 +16746,26 @@
         let triggerElement = $('#script_trigger_' + trigger.seq).children().eq(6);
         triggerElement.empty().off("*");
 
-        let deleteTriggerButton = $('<a class="button is-dark is-small" style="width: 26px; height: 26px"><span>X</span></a>');
+        let deleteTriggerButton = $('<a class="button is-small" style="width: 26px; height: 26px"><span>X</span></a>');
         triggerElement.append(deleteTriggerButton);
         deleteTriggerButton.on('click', function() {
             TriggerManager.RemoveTrigger(trigger.seq);
             updateSettingsFromState();
             updateTriggerSettingsContent();
+        });
+
+        let duplicateTriggerButton = $('<a class="button is-small" style="width: 26px; height: 26px"><span>&#9282;</span></a>');
+        triggerElement.append(duplicateTriggerButton);
+        duplicateTriggerButton.on('click', function() {
+            TriggerManager.DuplicateTrigger(trigger.seq);
+            updateSettingsFromState();
+            updateTriggerSettingsContent();
+        });
+
+        let evalizeTriggerButton = $('<a class="button is-small" style="width: 26px; height: 26px"><span>E</span></a>');
+        triggerElement.append(evalizeTriggerButton);
+        evalizeTriggerButton.on('click', function() {
+            TriggerManager.EvalizeTrigger(trigger.seq);
         });
     }
 
@@ -18814,16 +18893,6 @@
         document.documentElement.scrollTop = document.body.scrollTop = currentScrollPosition;
     }
 
-    function createQuickOptions(node, optionsElementId, optionsDisplayName, buildOptionsFunction) {
-        let optionsDiv = $(`<div style="cursor: pointer;" id="${optionsElementId}">${optionsDisplayName} Options</div>`);
-        node.append(optionsDiv);
-
-        addOptionUI(optionsElementId + "_btn", `#${optionsElementId}`, optionsDisplayName, buildOptionsFunction);
-        optionsDiv.on('click', function() {
-            openOptionsModal(optionsDisplayName, buildOptionsFunction);
-        });
-    }
-
     function createSettingToggle(node, settingKey, title, enabledCallBack, disabledCallBack) {
         let toggle = $(`
           <label class="switch script_bg_${settingKey}" tabindex="0" title="${title}">
@@ -18928,29 +18997,55 @@
     }
 
     function updatePrestigeInTopBar() {
+        const parentId = 's-prestige-type';
+        let parentNode = document.getElementById(parentId);
+
         if (settings.displayPrestigeTypeInTopBar) {
-            addPrestigeToTopBar();
+            if (parentNode === null) {
+                // Check for planetWrap parent node
+                const planetWrap = document.querySelector('.planetWrap');
+                if (planetWrap === null)
+                    return; // Return and try again later if it doesn't exist yet
+
+                // Create new parent node
+                parentNode = document.createElement('span');
+                parentNode.setAttribute('id', parentId);
+                parentNode.setAttribute('style', 'border-left: 1px solid; margin-left: 0.75rem; padding-left: 0.75rem;');
+
+                // Add to planetWrap
+                planetWrap.append(parentNode);
+
+                // Add helper button to open prestige options modal
+                addOptionUI('s-prestige-type-helper-btn', `#${parentId}`, 'Prestige', buildPrestigeSettings);
+            }
         }
         else {
             removePrestigeFromTopBar();
+            return; // Disable and return if displayPrestigeTypeInTopBar isn't enabled
         }
 
-        let prestigeNode = document.getElementById("s-prestige-type");
-        if (prestigeNode == null) { return; } // Element has not yet been added, cannot update
+        // Update if prestigeType changed
+        if (parentNode.getAttribute('data-prestige') !== settings.prestigeType) {
+            let infoNode = parentNode.querySelector('.info');
+            if (infoNode === null) {
+                // Create info node if needed
+                infoNode = document.createElement('span');
+                infoNode.setAttribute('class', 'info');
 
-        let prestige = prestigeTypes.find(prest => prest.val === settings.prestigeType);
-        prestigeNode.title = prestige.hint;
-        prestigeNode.textContent = prestige.label;
-    }
+                parentNode.append(infoNode);
+            }
 
-    function addPrestigeToTopBar() {
-        let nodeId = "s-prestige-type";
-        if (document.getElementById(nodeId) !== null) { return; } // We've already added the info to the top bar
+            let prestige = prestigeTypes.find(entry => entry.val === settings.prestigeType);
+            if (prestige === undefined) {
+                // Somehow failed to find prestige details, mock up an object from settings
+                prestige = {label: settings.prestigeType, hint: ""};
+            }
 
-        let planetWrapNode = $("#topBar .planetWrap");
-        if (planetWrapNode.length === 0) { return; } // The node that we want to add it to doesn't exist yet
-
-        planetWrapNode.append($(`<span id="s-prestige-type" style="border-left: 1px solid; margin-left: 1rem; padding-left: 1rem;" ></span>`));
+            // Update node with new prestige info
+            infoNode.title = prestige.hint;
+            infoNode.textContent = prestige.label;
+            parentNode.setAttribute('data-prestige', settings.prestigeType);
+        }
     }
 
     function removePrestigeFromTopBar() {
@@ -19068,8 +19163,6 @@
             createSettingToggle(togglesNode, 'autoSupply', 'Send excess resources to Spire. Normal resources sent when they close to storage cap, craftables - when above requirements. Takes priority over ejector.', createSupplyToggles, removeSupplyToggles);
             createSettingToggle(togglesNode, 'autoNanite', 'Consume resources to produce Nanite. Normal resources sent when they close to storage cap, craftables - when above requirements. Takes priority over supplies and ejector.');
             createSettingToggle(togglesNode, 'autoReplicator', 'Use excess power to replicate resources.');
-
-            createQuickOptions(togglesNode, "s-quick-prestige-options", "Prestige", buildPrestigeSettings);
 
             togglesNode.append('<a class="button is-dark is-small" id="bulk-sell"><span>Bulk Sell</span></a>');
             $("#bulk-sell").on('mouseup', function() {
