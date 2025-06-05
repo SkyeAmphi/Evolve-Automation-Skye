@@ -3141,7 +3141,9 @@
       ],[
           () => game.global.race['magnificent'] && settings.buildingShrineType !== "any",
           (building) => {
-              if (building === buildings.Shrine) {
+              // Futureproof for wasteland shrines and any new shrines that might be added
+              const shrineIds = ["shrine"];
+              if (shrineIds.includes(building._id)) {
                   let bonus = null;
                   if (game.global.city.calendar.moon > 0 && game.global.city.calendar.moon < 7){
                       bonus = "morale";
@@ -3155,8 +3157,13 @@
                       return true;
                   }
                   if (settings.buildingShrineType === "equally") {
-                      let minShrine = Math.min(game.global.city.shrine.morale, game.global.city.shrine.metal, game.global.city.shrine.know, game.global.city.shrine.tax);
-                      return game.global.city.shrine[bonus] !== minShrine;
+                      let minShrine = Math.min(
+                          game.global.city.shrine?.morale ?? 0,
+                          game.global.city.shrine?.metal ?? 0,
+                          game.global.city.shrine?.know ?? 0,
+                          game.global.city.shrine?.tax ?? 0
+                      );
+                      return game.global.city.shrine?.[bonus] !== minShrine;
                   } else {
                       return settings.buildingShrineType !== bonus;
                   }
