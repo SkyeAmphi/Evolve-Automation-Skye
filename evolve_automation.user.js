@@ -9488,17 +9488,53 @@
                         jobsToAssign = Math.min(jobsToAssign, jobMax[j]);
                         state.maxSpaceMiners = Math.max(state.maxSpaceMiners, Math.min(availableEmployees, job.breakpointEmployees(i, true)));
                     }
-                    if (job === jobs.Entertainer && !haveTech("superstar")) {
+                    if (job === jobs.Entertainer && (game.global.race['authority'] || !haveTech("superstar"))) {
                         if (jobMax[j] === undefined) {
-                            let taxBuffer = (settings.autoTax || haveTask("tax")) && game.global.civic.taxes.tax_rate < poly.taxCap(false) ? 1 : 0;
+                            let taxBuffer = (settings.autoTax || haveTask("tax")) && game.global.civic.taxes.tax_rate < (typeof poly !== 'undefined' && typeof poly.taxCap === 'function' ? poly.taxCap(false) : 0) ? 1 : 0;
                             let entertainerMorale = (game.global.tech['theatre'] + traitVal('musical', 0))
                                 * traitVal('emotionless', 0, '-') * traitVal('high_pop', 1, '=')
                                 * (state.astroSign === 'sagittarius' ? 1.05 : 1)
                                 * (game.global.race['lone_survivor'] ? 25 : 1);
-                            let moraleExtra = resources.Morale.rateOfChange - resources.Morale.maxQuantity - taxBuffer;
-                            jobMax[j] = job.count - Math.floor(moraleExtra / entertainerMorale);
+                            if (!resources.Morale.cachedMoraleExtra || resources.Morale.needsUpdate) {
+                                resources.Morale.cachedMoraleExtra = resources.Morale.rateOfChange - resources.Morale.maxQuantity - taxBuffer;
+                            try {
+                                // Authority-aware entertainer management
+                                const authorityMin = 100;
+                                const authority = (resources.Authority && (resources.Authority.currentQuantity ?? resources.Authority.amount)) || 0;
+                                
+                                // Calculate authority gain from garrison
+                                let authorityPerGarrison = 0.7 + (game.global.tech['evil'] ? 0.1 * game.global.tech.evil : 0);
+                                let garrisonWorkers = game.global.civic.garrison.workers;
+                                let highPopMultiplier = traitVal('high_pop', 0, 1);
+                                let authorityGain = garrisonWorkers * highPopMultiplier * authorityPerGarrison;
+                                if (game.global.race['grenadier']) authorityGain *= 1.75;
+                                if (game.global.civic.govern.type === 'autocracy') authorityGain *= 1.08;
+                                else if (game.global.civic.govern.type === 'dictator') authorityGain *= 1.12;
+                                
+                                // Calculate morale effect on authority
+                                let moraleLoss = Math.max(0, resources.Morale.currentQuantity - 100);
+                                if (game.global.civic.govern.type === 'democracy') moraleLoss *= 0.9;
+                                
+                                // Calculate max entertainers using the entertainerMorale from above
+                                let maxEntertainers = Math.max(0, Math.floor((authority + authorityGain - authorityMin - moraleLoss) / entertainerMorale));
+                                
+                                // Use lower of normal cap and authority cap
+                                jobMax[j] = Math.min(maxEntertainers, job.count - Math.floor(moraleExtra / entertainerMorale));
+                            } catch(err) {
+                                console.error("Authority management error:", err, {
+                                    entertainerMorale,
+                                    moraleExtra,
+                                    authority,
+                                    authorityGain,
+                                    moraleLoss
+                                });
+                                // Implement fallback mechanism
+                                jobMax[j] = Math.max(0, job.count - Math.floor(moraleExtra / entertainerMorale));
+                                // Optionally notify the user or log a warning for further investigation
+                                console.warn("Fallback applied for Authority management due to error.");
+                                }
+                            }
                         }
-                        jobsToAssign = Math.min(jobsToAssign, jobMax[j]);
                     }
                     // TODO: Remove extra bankers when cap not needed
                     // Don't assign bankers if our money is maxed and bankers aren't contributing to our money storage cap
