@@ -1208,6 +1208,85 @@
         }
     }
 
+
+    class CityVueAction extends CityAction {
+        get vue() {
+            return getVueById("city-" + this.id);
+        }
+
+        isUnlocked() {
+            // Check if the action exists in the specified tab and location
+            if (this._tab && this._tab === "portal") {
+                // For portal tab items, we need special handling
+                if (game.global.hasOwnProperty(this._tab) && 
+                    game.global[this._tab].hasOwnProperty(this._location)) {
+                
+                // For warlord-specific buildings, check race trait
+                if (["s_alter", "shrine", "meditation"].includes(this._action)) {
+                    return game.global.race['warlord'] && game.global.portal.hasOwnProperty(this._location);
+                }
+            }
+        }
+        
+        // Fall back to the parent implementation for other cases
+        return super.isUnlocked();
+        }
+    }
+    
+    class RedirectAction extends Action {
+        constructor(name, tab, id, location, flags) {
+            super(name, tab, id, location, flags);
+            //save original binding for later
+            this._originalBinding = this._tab + "-" + this._id;
+            this._cityBinding = "city-" + this._id;
+        }
+
+        // Dynamically find the action's data in any plausible location
+        findActionContainer() {
+            // Try tab/location/id in game.global
+            if (this._tab && game.global[this._tab]) {
+                if (this._location && game.global[this._tab][this._location]?.[this._id])
+                    return game.global[this._tab][this._location];
+                if (game.global[this._tab][this._id])
+                    return game.global[this._tab];
+            }
+            // Try city
+            if (game.global.city?.[this._id])
+                return game.global.city;
+            // Try all top-level containers
+            for (const key of Object.keys(game.global)) {
+                if (game.global[key]?.[this._id])
+                    return game.global[key];
+            }
+            return null;
+        }
+
+        isUnlocked() {
+            // Robustly check if the action exists and is visible/unlocked in any plausible container.
+            const container = this.findActionContainer();
+            if (!container) return false;
+            const instance = container[this._id];
+            // Check for a display property, or fallback to existence and count/visibility
+            if (instance && typeof instance === "object") {
+            if ("display" in instance) return !!instance.display;
+            if ("count" in instance) return true;
+            if ("on" in instance) return true;
+            }
+            // Fallback: check if a Vue binding exists for this action
+            return !!getVueById(this._cityBinding) || !!getVueById(this._vueBinding);
+        }
+
+        get vue() {
+            // Prefer city binding, fallback to default
+            return getVueById(this._cityBinding) || getVueById(this._vueBinding);
+        }
+
+        get instance() {
+            const container = this.findActionContainer();
+            return container ? container[this._id] : undefined;
+        }
+    }
+
     class Pillar extends Action {
         get count() {
             return this.isUnlocked() ? this.definition.count() : 0;
@@ -2930,11 +3009,25 @@
           () => "",
           () => 0 // Set weighting to zero right away, and skip all checks if autoBuild is disabled
       ],[
-          () => true,
-          (building) => !building.isUnlocked(),
-          () => "Locked",
-          () => 0 // Should always be on top, processing locked building may lead to issues
-      ],[
+    () => true,
+    (building) => {
+        const sameIdBuildings = Object.values(buildings).filter(b => b._id === building._id);
+        if (sameIdBuildings.length > 1) {
+            // If this building is not unlocked, it's locked
+            if (!building.isUnlocked()) return true;
+            // If any other building with the same id is unlocked, and it's not this one, treat this as locked
+            for (const b of sameIdBuildings) {
+                if (b !== building && b.isUnlocked()) return true;
+            }
+            // Otherwise, allow through
+            return false;
+        }
+        // No duplicates, just use isUnlocked
+        return !building.isUnlocked();
+    },
+    () => "Locked",
+    () => 0
+],[
           () => true,
           (building) => state.queuedTargets.includes(building),
           () => "Queued building, processing...",
@@ -5983,7 +6076,6 @@
                             building.extraDescription += note + "<br>";
                         }
                         building.weighting *= activeRules[j][wrMultiplier](result);
-
 
                         // Last rule disabled building, no need to check the rest
                         if (building.weighting <= 0) {
@@ -14023,14 +14115,14 @@
         }
         mutations.forEach(mutation => mutation.addedNodes.forEach(node => {
             if (node.id === "popper") {
-                let popperObserver = new MutationObserver((popperMutations) => {
+                let popperObserver = new MutationObserver(() => {
                     // Add tooltips once again when popper cleared
                     if (!node.querySelector(".script-tooltip")) {
                         popperObserver.disconnect();
                         addTooltip(node);
                         popperObserver.observe(node, {childList: true});
                     }
-                })
+                });
                 addTooltip(node);
                 popperObserver.observe(node, {childList: true});
             }
@@ -14055,12 +14147,36 @@
 
         let match = null;
         let obj = null;
+        // Enhanced logic: try to resolve by tab context if available
+        let tab = node.closest('[data-tab]')?.getAttribute('data-tab') || null;
         if (match = dataId.match(/^popArpa([a-z_-]+)\d*$/)) { // "popArpa[id-with-no-tab][quantity]" for projects
             obj = arpaIds["arpa" + match[1]];
         } else if (match = dataId.match(/^q([A-Za-z_-]+)\d*$/)) { // "q[id][order]" for buildings in queue
-            obj = buildingIds[match[1]] || arpaIds[match[1]];
-        } else { // "[id]" for buildings and researches
-            obj = buildingIds[dataId] || techIds[dataId];
+            // Try to resolve by tab if possible
+            if (tab && window.buildingIdsByTab && buildingIdsByTab[tab] && buildingIdsByTab[tab][match[1]]) {
+                obj = buildingIdsByTab[tab][match[1]];
+            } else {
+                obj = buildingIds[match[1]] || arpaIds[match[1]];
+            }
+        } else {
+            // Try to resolve by tab if possible
+            if (tab && window.buildingIdsByTab && buildingIdsByTab[tab] && buildingIdsByTab[tab][dataId]) {
+                obj = buildingIdsByTab[tab][dataId];
+            } else {
+                obj = buildingIds[dataId] || techIds[dataId];
+                
+                // Check if we found an object that's a RedirectAction with _originalBinding
+                if (obj && obj._originalBinding) {
+                    // If we have tab context, make sure it matches the original binding's tab
+                    let originalTab = obj._originalBinding.split("-")[0];
+                    if (tab && originalTab !== tab) {
+                        // We found an object from a different tab - try to find the correct one
+                        if (buildingIdsByTab && buildingIdsByTab[tab] && buildingIdsByTab[tab][dataId]) {
+                            obj = buildingIdsByTab[tab][dataId];
+                        }
+                    }
+                }
+            }
         }
         if (!obj || (obj instanceof Technology && obj.isResearched())) {
             return;
