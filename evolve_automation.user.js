@@ -9495,44 +9495,140 @@
                                 * traitVal('emotionless', 0, '-') * traitVal('high_pop', 1, '=')
                                 * (state.astroSign === 'sagittarius' ? 1.05 : 1)
                                 * (game.global.race['lone_survivor'] ? 25 : 1);
-                            let moraleExtra = resources.Morale.rateOfChange - resources.Morale.maxQuantity - taxBuffer;
-                            try {
+
+                            // Check if authority is actually unlocked and relevant
+                            const hasAuthority = game.global.race.universe === 'evil' && resources.Authority && resources.Authority.isUnlocked();
+
+                            if (hasAuthority) {
+                                console.log("Entering authority-aware entertainer management");
                                 // Authority-aware entertainer management
-                                const authorityMin = 100;
-                                const authority = (resources.Authority && (resources.Authority.currentQuantity ?? resources.Authority.amount)) || 0;
                                 
-                                // Calculate authority gain from garrison
-                                let authorityPerGarrison = 0.7 + (game.global.tech['evil'] ? 0.1 * game.global.tech.evil : 0);
-                                let garrisonWorkers = game.global.civic.garrison.workers;
+                                // Begin block for establishing authority-related variables
+                                // current authority situation values from game
+                                const authority = resources.Authority.currentQuantity || 0;
+                                console.log("Current authority:", authority);
+                                const maxAuthority = resources.Authority.maxStorage;
+
+                                // Calculate authority gain from garrison and fortress
+                                let authorityPerSoldier = 0.7 + (game.global.tech['evil'] ? 0.1 * game.global.tech.evil : 0);
+                                let garrisonSoldiers = game.global.civic.garrison.workers;
+
+                                // Handle hell garrison safely
+                                let hellSoldiers = 0;
+                                if (game.global.portal && game.global.portal.fortress && typeof game.global.portal.fortress.garrison === 'number') {
+                                    // Calculate soldiers contributing to authority (not on patrol)
+                                    let totalHellSoldiers = game.global.portal.fortress.garrison;
+                                    let patrolSoldiers = (game.global.portal.fortress.patrols || 0) * (game.global.portal.fortress.patrol_size || 0);
+                                    hellSoldiers = totalHellSoldiers - patrolSoldiers;
+                                }
+
+                                let authoriTroopers = garrisonSoldiers + hellSoldiers;
                                 let highPopMultiplier = traitVal('high_pop', 0, 1);
-                                let authorityGain = garrisonWorkers * highPopMultiplier * authorityPerGarrison;
-                                if (game.global.race['grenadier']) authorityGain *= 1.75;
-                                if (game.global.civic.govern.type === 'autocracy') authorityGain *= 1.08;
-                                else if (game.global.civic.govern.type === 'dictator') authorityGain *= 1.12;
+                                let baseAuthority = (0.7 + 0.1 * (game.global.tech.evil || 0));
+                                // full authority multiplier
+                                let authScale = baseAuthority
+                                    * (game.global.race.grenadier ? 1.75 : 1)
+                                    * (
+                                       (game.global.civic?.govern?.type === "autocracy" && 1.08) 
+                                        || (game.global.civic?.govern?.type === "dictator" && 1.12) 
+                                        || 1)
+                                       * highPopMultiplier;
+                                let authorityGain = authoriTroopers * authScale;
+
+                                // Target authority, planned to be a user configuration option later
+                                const authorityMin = 100;
+
+                                // Begin block for establishing Morale-related variables
+                                // current morale situation values from game
+                                const currentMorale = resources.Morale.currentQuantity;
+                                const maxMorale = resources.Morale.maxStorage;
+                                const maxEntertainers = jobs.Entertainer.max;
+                                const entertainers = jobs.Entertainer.workers;
+                                const sumEntertainerMorale = entertainerMorale * entertainers;
+
+                                // do we have superstar
+                                const hasSuperstar = haveTech("superstar");
+                                const superstarIncrease = hasSuperstar ? 1 : 0; // likely useless, can just use entertainers beyond morale cap * hasSuperstar(which would have the correct value of 1 or 0)
+
+                                // extra potentially important variables
+                                let moraleExtra = resources.Morale.rateOfChange - maxMorale - taxBuffer; // legacy value I may not want to use anymore
+                                let sumPotentialEntertainerMorale = entertainerMorale * maxEntertainers;
+                                let sumTargetEntertainerMorale = entertainerMorale * targetEntertainerCount;
+                                let canReachCap = currentMorale >= maxMorale ? (currentMorale - sumEntertainerMorale) + sumPotentialEntertainerMorale >= maxMorale : false;
+                                let overCap = currentMorale >= maxMorale ? (currentMorale - maxMorale) : 0;
+
+                                // definitely crucial variables
+                                const moraleUntilCap = maxMorale - currentMorale;
+                                let entertainersUntilCap = moraleUntilCap ? Math.max(0, Math.floor(moraleUntilCap / entertainerMorale)) : 0;
+
+                                // target entertainer count calculations
+                                let targetEntertainerCount = Math.min(maxEntertainers, Math.max(0, Math.floor((authority + authorityGain - authorityMin) / entertainerMorale)));
+                                let entertainersAfterCap = hasSuperstar ? maxEntertainers - (entertainers + entertainersUntilCap) : 0;
+                                let expectedTargetMoraleGain = hasSuperstar ? (entertainersUntilCap * entertainerMorale) + entertainersAfterCap : (entertainersUntilCap * entertainerMorale);
+                                //let moralePostCap = hasSuperstar ? (entertainersUntilCap * superstarIncrease) : 0;
+
+                                let targetMaxMorale = hasSuperstar ? maxMorale + entertainersAfterCap : maxMorale;
+                                if (hasSuperstar) {
+                                    targetMaxMorale = maxMorale + (Math.abs(maxEntertainers - targetEntertainerCount) || 0);
+                                }
+
+                                let potentialMaxMorale = hasSuperstar ? maxMorale + (Math.abs(maxEntertainers - entertainers) || 0) : maxMorale;
+
+                                // Calculate the actual decrease to authority from morale per entertainer based on entertainerMorale until we reach cap, then superstar after cap
+                                // we lose entertainerMorale authority per entertainer until cap
+                                // then lose superstar authority per entertainer after cap
+                                let moraleCapReached = currentMorale >= maxMorale;
+                                let entertainerMorale = moraleCapReached ? (hasSuperstar ? 1 : 0) : (resources.Morale.maxStorage / 100 * entertainerMorale);
+                                let actualMoraleLoss = 0;
+                                if (resources.Morale.currentQuantity >= resources.Morale.maxStorage && !hasSuperstar) {
+                                    actualMoraleLoss = maxMorale;
+                                } else {
+                                    potentialMaxMorale = resources.Morale.maxStorage + (Math.abs(maxEntertainers - jobs.Entertainer.workers) || 0);
+                                }
+                                    //(potentialMaxMorale = resources.Morale.maxStorage + (Math.abs(maxEntertainers - jobs.Entertainer.workers) || 0)), 0; actualMoraleLoss > 0
+                                    // with superstar, each entertainer reduces authority by 1, without superstar by 0
+                                    // would the new entertainer quantity take us to or above morale cap?
+                                    incomingEntertainers = maxEntertainers - jobsToAssign ? maxEntertainers - jobsToAssign : 0;
+                                    if (incomingEntertainers) { // are there incoming entertainers
+                                        actualMoraleLoss = (currentMorale + (incomingEntertainers * entertainerMorale)) >= potentialMaxMorale ?
+                                            (potentialMaxMorale - currentMorale) - 100 :
+                                            maxMorale - currentMorale;
+                                    }
+
+
+                                    //if (incomingEntertainers) { (moraleCapReached ? currentMorale + (incomingEntertainers) * entertainerMorale : currentMorale) : currentMorale) < actualMoraleLoss
+                                    //    authority -= hasSuperstar ? 1 : 0;
+                                    //}
+
+                                    //authority -= hasSuperstar ? 1 : 0;
                                 
+
                                 // Calculate morale effect on authority
                                 let moraleLoss = Math.max(0, resources.Morale.currentQuantity - 100);
                                 if (game.global.civic.govern.type === 'democracy') moraleLoss *= 0.9;
-                                
+
                                 // Calculate max entertainers using the entertainerMorale from above
-                                let maxEntertainers = Math.max(0, Math.floor((authority + authorityGain - authorityMin - moraleLoss) / entertainerMorale));
-                                
-                                // Use lower of normal cap and authority cap
-                                jobMax[j] = Math.min(maxEntertainers, job.count - Math.floor(moraleExtra / entertainerMorale));
-                            } catch(err) {
-                                console.error("Authority management error:", err, {
-                                    entertainerMorale,
-                                    moraleExtra,
-                                    authority,
-                                    authorityGain,
-                                    moraleLoss
-                                });
-                                // Implement fallback mechanism
+                                let newMaxEntertainers = Math.max(0, Math.floor((authority + authorityGain - authorityMin - moraleLoss) / entertainerMorale));
+                                console.log("Authority management maxEntertainers:", newMaxEntertainers);
+
+                                // Use authority-based calculation with hysteresis
+                                const hysteresis = 1;
+                                if (Math.abs(job.count - maxEntertainers) > hysteresis) {
+                                    jobMax[j] = maxEntertainers;
+                                } else {
+                                    // Keep current assignment when within hysteresis range
+                                   jobMax[j] = job.count;
+                                }
+
+                                    console.log("Authority management jobMax:", jobMax[j]);
+                            } else {
+                                // Standard morale-based calculation (non-evil universe or authority not available)
+                                let moraleExtra = resources.Morale.rateOfChange - resources.Morale.maxQuantity - taxBuffer;
                                 jobMax[j] = Math.max(0, job.count - Math.floor(moraleExtra / entertainerMorale));
-                                // Optionally notify the user or log a warning for further investigation
-                                console.warn("Fallback applied for Authority management due to error.");
                             }
-                        }
+                        
+                        jobsToAssign = Math.min(jobsToAssign, jobMax[j]);
+                        } 
                     }
                     // TODO: Remove extra bankers when cap not needed
                     // Don't assign bankers if our money is maxed and bankers aren't contributing to our money storage cap
