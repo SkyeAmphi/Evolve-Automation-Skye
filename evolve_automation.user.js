@@ -5954,6 +5954,225 @@
         }
     }
 
+    var AuthorityManager = {
+        // Configuration
+        _authorityMin: 100, // Default minimum authority target
+        
+        // Cache for performance
+        _cache: {
+            lastUpdate: 0,
+            values: null
+        },
+        
+        // Check if authority system is available and relevant
+        hasAuthority() {
+            return game.global.race.universe === 'evil' && 
+                   resources.Authority && 
+                   resources.Authority.isUnlocked();
+        },
+        
+        // Get current authority values with caching
+        getAuthorityData(forceRefresh = false) {
+            const currentTick = state.scriptTick;
+            
+            // Return cached data if available and fresh
+            if (!forceRefresh && this._cache.lastUpdate === currentTick && this._cache.values) {
+                return this._cache.values;
+            }
+            
+            if (!this.hasAuthority()) {
+                return null;
+            }
+            
+            const authority = resources.Authority.currentQuantity || 0; // current authority
+            const maxAuthority = resources.Authority.maxStorage; 
+            const garrisonSoldiers = game.global.civic.garrison.workers - // total number of soldiers anywhere
+                game.global.civic.garrison.crew - 
+                (game.global.portal?.fortress?.garrison || 0) - // total number of soldiers anywhere in hell
+                (game.global.space?.fob?.troops || 0) - // soldiers at forward base
+                (game.global.eden?.pillbox?.staffed || 0); // soldiers in pillboxes
+
+            // Calculate authority gain from soldiers
+            // Determine number of hell soldiers contributing to authority, which does not include soldiers on patrol
+            let idleHellSoldiers = 0;
+            if (game.global.portal && game.global.portal.fortress && 
+                typeof game.global.portal.fortress.garrison === 'number') {
+                const totalHellSoldiers = game.global.portal.fortress.garrison;
+                const patrolSoldiers = (game.global.portal.fortress.patrols || 0) * 
+                                     (game.global.portal.fortress.patrol_size || 0);
+                idleHellSoldiers = totalHellSoldiers - patrolSoldiers;
+            }
+            
+            const authoriTroopers = garrisonSoldiers + idleHellSoldiers; // total number of soldiers contributing to authority
+            const highPopMultiplier = traitVal('high_pop', 0, 1);
+            const baseAuthority = (0.7 + 0.1 * (game.global.tech.evil || 0));
+            
+            // Authority scale calculation matching game mechanics
+            const authScale = baseAuthority
+                * (game.global.race.grenadier ? 1.75 : 1)
+                * (
+                   (game.global.civic?.govern?.type === "autocracy" && 1.08) 
+                    || (game.global.civic?.govern?.type === "dictator" && 1.12) 
+                    || 1)
+                   * highPopMultiplier;
+            
+            const authorityGain = authoriTroopers * authScale;
+            
+            // Calculate morale effect on authority
+            let moraleLoss = Math.max(0, resources.Morale.currentQuantity - 100);
+            if (game.global.civic.govern.type === 'democracy') {
+                moraleLoss *= 0.9;
+            }
+            
+            const data = {
+                current: authority,
+                max: maxAuthority,
+                gain: authorityGain,
+                moraleLoss: moraleLoss,
+                netGain: authorityGain - moraleLoss,
+                soldiers: {
+                    garrison: garrisonSoldiers,
+                    hell: idleHellSoldiers,
+                    total: authoriTroopers
+                },
+                multipliers: {
+                    base: baseAuthority,
+                    perSoldier: authScale,
+                    highPop: highPopMultiplier,
+                    scale: authScale
+                },
+                government: {
+                    type: game.global.civic?.govern?.type || 'anarchy',
+                    bonus: (game.global.civic?.govern?.type === "autocracy" && 1.08) 
+                        || (game.global.civic?.govern?.type === "dictator" && 1.12) 
+                        || 1
+                }
+            };
+            
+            // Cache the results
+            this._cache.lastUpdate = currentTick;
+            this._cache.values = data;
+            
+            return data;
+        },
+        
+        // Get available authority after accounting for minimum reserve
+        getAvailableAuthority(authorityMin = null) {
+            const data = this.getAuthorityData();
+            if (!data) return 0;
+            
+            const minReserve = authorityMin !== null ? authorityMin : this._authorityMin;
+            return Math.max(0, data.current - minReserve);
+        },
+        
+        // Calculate optimal entertainer count based on authority
+        calculateOptimalEntertainers(authorityMin = null) {
+            const data = this.getAuthorityData();
+            if (!data) return null;
+            
+            const minReserve = authorityMin !== null ? authorityMin : this._authorityMin;
+            
+            // Get entertainer morale value
+            const entertainerMorale = (game.global.tech['theatre'] + traitVal('musical', 0))
+                * traitVal('emotionless', 0, '-') * traitVal('high_pop', 1, '=')
+                * (state.astroSign === 'sagittarius' ? 1.05 : 1)
+                * (game.global.race['lone_survivor'] ? 25 : 1);
+            
+            const currentMorale = resources.Morale.currentQuantity;
+            const maxMorale = resources.Morale.maxStorage;
+            const maxEntertainers = jobs.Entertainer.max;
+            const hasSuperstar = haveTech("superstar");
+            
+            // Calculate authority cost per entertainer
+            const moraleCapReached = currentMorale >= maxMorale;
+            let authorityCostPerEntertainer;
+            
+            if (moraleCapReached) {
+                authorityCostPerEntertainer = hasSuperstar ? 1 : 0;
+            } else {
+                // Authority loss from morale penalty (morale above 100 reduces authority loss)
+                authorityCostPerEntertainer = Math.max(0, entertainerMorale - Math.max(0, currentMorale - 100));
+            }
+            
+            // Calculate optimal count
+            const availableAuthority = data.current - minReserve;
+            let optimalCount = 0;
+            
+            if (authorityCostPerEntertainer > 0) {
+                optimalCount = Math.floor(availableAuthority / authorityCostPerEntertainer);
+            } else if (!moraleCapReached) {
+                // If we're below morale cap and no authority cost, we can fill to morale cap
+                const moraleUntilCap = maxMorale - currentMorale;
+                optimalCount = Math.floor(moraleUntilCap / entertainerMorale);
+            } else if (hasSuperstar) {
+                // At morale cap with superstar, unlimited entertainers (within job limits)
+                optimalCount = maxEntertainers;
+            }
+            
+            return {
+                optimal: Math.min(maxEntertainers, Math.max(0, optimalCount)),
+                maxPossible: maxEntertainers,
+                authorityCost: authorityCostPerEntertainer,
+                entertainerMorale: entertainerMorale,
+                moraleCapReached: moraleCapReached,
+                hasSuperstar: hasSuperstar
+            };
+        },
+        
+        // Get authority impact of soldier changes (useful for autoHell, autoFight)
+        getSoldierAuthorityImpact(garrisonChange = 0, hellChange = 0) {
+            const data = this.getAuthorityData();
+            if (!data) return 0;
+            
+            const totalChange = garrisonChange + hellChange;
+            return totalChange * data.multipliers.scale;
+        },
+        
+        // Check if we have sufficient authority for a specific purpose
+        hasSufficientAuthority(requiredAmount, authorityMin = null) {
+            const available = this.getAvailableAuthority(authorityMin);
+            return available >= requiredAmount;
+        },
+        
+        // Get authority efficiency (how much authority per soldier)
+        getAuthorityEfficiency() {
+            const data = this.getAuthorityData();
+            if (!data) return 0;
+
+            return data.multipliers.scale;
+        },
+
+        // Set minimum authority target (for user configuration)
+        setMinimumAuthority(amount) {
+            this._authorityMin = Math.max(0, amount);
+        },
+
+        // Get current minimum authority setting
+        getMinimumAuthority() {
+            return this._authorityMin;
+        },
+
+        // Force cache refresh (useful when major game state changes)
+        refreshCache() {
+            this._cache.lastUpdate = 0;
+            this._cache.values = null;
+        },
+    
+        // Debug/utility method to get all authority-related info
+        getDebugInfo() {
+            const data = this.getAuthorityData(true);
+            const entertainerInfo = this.calculateOptimalEntertainers();
+        
+            return {
+                authority: data,
+                entertainers: entertainerInfo,
+                available: this.getAvailableAuthority(),
+                efficiency: this.getAuthorityEfficiency(),
+                minTarget: this.getMinimumAuthority()
+            };
+        }
+    };
+
     var BuildingManager = {
         priorityList: [],
         statePriorityList: [],
