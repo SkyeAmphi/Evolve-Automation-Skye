@@ -5064,37 +5064,48 @@
             return true;
         },
 
-        getHellReservedSoldiers(){
-            let soldiers = 0;
+        // function soulForgeSoldiers from portal.js https://github.com/pmotschmann/Evolve/blob/9aff5f2add288aa11fd13b7f45c5cf1b8a79b1ae/src/portal.js#L3656
+        getSoulForgeSoldiers() {
+            if (buildings.PitSoulForge.count <= 0 ||
+                (!buildings.PitSoulForge.autoStateEnabled && buildings.PitSoulForge.stateOnCount <= 0)) {
+                return 0;
+            }
 
+            const soldierRating = game.armyRating(1, "hellArmy");
+            if (soldierRating <= 0) return 0;
+
+            // Calculate number of soldiers needed for Soul Forge
+            let base = game.global.race['warlord'] ? 400 : 650;
+            let soulForgeSoldiers = Math.round(base / soldierRating);
+
+            // Adjust for gun emplacements
+            if (buildings.PitGunEmplacement.count > 0) {
+                soulForgeSoldiers -= Math.floor(buildings.PitGunEmplacement.stateOnCount * 1.5);
+                soulForgeSoldiers = Math.max(1, soulForgeSoldiers);
+            }
+
+            return soulForgeSoldiers;
+        },
+
+        getHellReservedSoldiers() {
+            let soldiers = 0;
             const soldierRating = game.armyRating(1, "hellArmy");
 
             // Assign soldiers to assault forge once other requirements are met
             if (settings.autoBuild && buildings.PitAssaultForge.isAutoBuildable() && soldierRating > 0) {
                 if (settings.hellAssaultReserve || !Object.entries(buildings.PitAssaultForge.cost).find(([id, amount]) => resources[id].currentQuantity < amount)) {
-                    soldiers = Math.round(650 / soldierRating);
+                    soldiers += Math.round(650 / soldierRating);
                 }
             }
 
-            // Reserve soldiers operating forge - check if it exists and could be powered, not if it's already powered
-            if (buildings.PitSoulForge.count > 0 && (buildings.PitSoulForge.autoStateEnabled || buildings.PitSoulForge.stateOnCount > 0) && soldierRating > 0) {
-                // Calculate number of soldiers needed for Soul Forge
-                let base = game.global.race['warlord'] ? 400 : 650;
-             let soulForgeSoldiers = Math.round(base / soldierRating);
-        
-                // Adjust for gun emplacements
-                if (buildings.PitGunEmplacement.count > 0) {
-                    soulForgeSoldiers -= Math.floor(buildings.PitGunEmplacement.stateOnCount * 1.5);
-                    soulForgeSoldiers = Math.max(1, soulForgeSoldiers);
-                }
-
-                soldiers += soulForgeSoldiers;
-            }
+            // Soul Forge soldiers
+            soldiers += this.getSoulForgeSoldiers();
 
             // Guardposts need at least one soldier free so lets just always keep one handy
             if (buildings.RuinsGuardPost.count > 0) {
                 soldiers += (buildings.RuinsGuardPost.stateOnCount + 1) * traitVal('high_pop', 0, 1);
             }
+            // Returns the total number of soldiers reserved for Hell-related buildings (e.g. Soul Forge, Guard Posts).
             return soldiers;
         },
 
