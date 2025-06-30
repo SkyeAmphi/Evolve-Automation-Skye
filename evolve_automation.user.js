@@ -6081,16 +6081,12 @@
 
         // Calculate optimal entertainer count based on authority
         calculateOptimalEntertainers(authorityMin = null) {
-            // Get up-to-date authority data
             const data = this.getAuthorityData();
             if (!data) return null;
 
-            // Use provided minimum authority, or fallback to configured default
             const minReserve = authorityMin !== null ? authorityMin : this._authorityMin;
 
-            // Calculate the morale provided by a single Entertainer
-            // (theatre tech + musical trait) * emotionless trait * high_pop trait
-            // * (Sagittarius bonus) * (Lone Survivor bonus)
+            // Morale per entertainer
             const entertainerMorale =
                 (game.global.tech['theatre'] + traitVal('musical', 0))
                 * traitVal('emotionless', 0, '-')
@@ -6099,44 +6095,62 @@
                 * (game.global.race['lone_survivor'] ? 25 : 1);
 
             const currentMorale = resources.Morale.currentQuantity;
-            const maxMorale = resources.Morale.maxStorage;
+            const baseMoraleCap = resources.Morale.maxStorage;
             const maxEntertainers = jobs.Entertainer.max;
             const hasSuperstar = haveTech("superstar");
 
-            const moraleCapReached = currentMorale >= maxMorale;
-
-            // Calculate authority cost per entertainer
-            let authorityCostPerEntertainer;
-            if (moraleCapReached) {
-                // At morale cap, only Superstar makes entertainers cost authority
-                authorityCostPerEntertainer = hasSuperstar ? 1 : 0;
-            } else {
-                // Below morale cap, authority cost is reduced by current morale above 100
-                authorityCostPerEntertainer = Math.max(0, entertainerMorale - Math.max(0, currentMorale - 100));
+            // Helper for morale cap with Superstar
+            function getMoraleCap(entertainers) {
+                if (hasSuperstar) {
+                    return Math.floor(baseMoraleCap * (1 + entertainers / 100));
+                }
+                return baseMoraleCap;
             }
 
-            // Calculate available authority for entertainers
-            const availableAuthority = data.current - minReserve;
-            let optimalCount = 0;
+            // Helper for authority penalty
+            function getMoralePenalty(morale, cap) {
+                return Math.max(0, Math.min(morale - 100, cap - 100));
+            }
 
-            if (authorityCostPerEntertainer > 0) {
-                // Limit by available authority
-                optimalCount = Math.floor(availableAuthority / authorityCostPerEntertainer);
-            } else if (!moraleCapReached) {
-                // No authority cost, can fill up to morale cap
-                const moraleUntilCap = maxMorale - currentMorale;
-                optimalCount = Math.floor(moraleUntilCap / entertainerMorale);
-            } else if (hasSuperstar) {
-                // At morale cap with Superstar, can use all available slots
-                optimalCount = maxEntertainers;
+            // Helper for authority calculation (matches getAuthorityData)
+            function getAuthority(idleSoldiers, penalty) {
+                // Use cached scale from getAuthorityData for consistency
+                return 80 + (data.multipliers.scale * idleSoldiers) - penalty;
+            }
+
+            // Simulate incrementally
+            let optimal = 0;
+            let morale = currentMorale;
+            let entertainers = 0;
+            let idleSoldiers = data.soldiers.total; // If entertainers pull from idle, adjust here if needed
+            let authority = data.current;
+
+            for (let i = 1; i <= maxEntertainers; i++) {
+                let nextMorale = morale + entertainerMorale;
+                let nextCap = getMoraleCap(i);
+                let penalty = getMoralePenalty(nextMorale, nextCap);
+                let nextAuthority = getAuthority(idleSoldiers, penalty);
+
+                // Stop if authority would drop below reserve
+                if (nextAuthority < minReserve) break;
+
+                // Stop if morale would exceed cap (unless Superstar is present)
+                if (!hasSuperstar && nextMorale > nextCap) break;
+
+                // Accept this assignment
+                morale = nextMorale;
+                authority = nextAuthority;
+                entertainers = i;
             }
 
             return {
-                optimal: Math.min(maxEntertainers, Math.max(0, optimalCount)),
+                optimal: entertainers,
                 maxPossible: maxEntertainers,
-                authorityCost: authorityCostPerEntertainer,
+                resultingMorale: morale,
+                resultingAuthority: authority,
+                resultingMoraleCap: getMoraleCap(entertainers),
+                authorityMin: minReserve,
                 entertainerMorale: entertainerMorale,
-                moraleCapReached: moraleCapReached,
                 hasSuperstar: hasSuperstar
             };
         },
