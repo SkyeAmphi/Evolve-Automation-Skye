@@ -6079,6 +6079,19 @@
             return Math.max(0, data.current - minReserve);
         },
 
+        // For calculating new or existing morale caps
+        getMoraleCap(entertainers) {
+            const currentMoraleCap = resources.Morale.maxStorage;
+            const currentEntertainers = jobs.Entertainer.count;
+            const hasSuperstar = haveTech("superstar");
+
+            // Determine base morale cap (without any superstar entertainer bonuses)
+            const baseMoraleCap = hasSuperstar ? currentMoraleCap - currentEntertainers : currentMoraleCap;
+
+            // Calculate what the cap would be with the specified number of entertainers
+            return hasSuperstar ? baseMoraleCap + entertainers : baseMoraleCap;
+        },
+
         // Calculate optimal entertainer count based on authority
         calculateOptimalEntertainers(authorityMin = null) {
             const data = this.getAuthorityData();
