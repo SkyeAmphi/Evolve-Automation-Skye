@@ -6066,6 +6066,30 @@
             return data;
         },
 
+        // Get authority penalty from current or specified morale and cap
+        // This is the core calculation that many other methods depend on
+        getAuthorityPenalty(morale = null, cap = null) {
+            if (!this.hasAuthority()) return 0;
+
+            const data = this.getAuthorityData();
+            const currentMorale = morale ?? data.morale;
+            const moraleCap = cap ?? data.moraleCap;
+
+            // No penalty if morale is at or above cap
+            if (currentMorale >= moraleCap) return 0;
+
+            // Calculate penalty: each point below cap costs authority
+            const moraleDeficit = moraleCap - currentMorale;
+            const penaltyRate = game.global.race['blissful'] ? 0.25 : 0.5;
+
+            return Math.round(moraleDeficit * penaltyRate);
+        },
+
+        // Convenience method - keeping the old name for compatibility
+        getAuthorityPenaltyFromMorale(morale = null, cap = null) {
+            return this.getAuthorityPenalty(morale, cap);
+        },
+
         // Get available authority after accounting for minimum reserve
         getAvailableAuthority(authorityMin = null) {
             const data = this.getAuthorityData();
@@ -6088,12 +6112,39 @@
             return hasSuperstar ? baseMoraleCap + entertainers : baseMoraleCap;
         },
 
+        getAuthorityPenaltyFromMorale(morale = null, cap = null) { // duplicate of getAuthorityPenalty
+            // Use current values if not provided
+            const currentMorale = morale !== null ? morale : resources.Morale.currentQuantity;
+            const currentCap = cap !== null ? cap : resources.Morale.maxQuantity;
+
+            // Calculate base penalty (morale above 100, capped by cap above 100)
+            const basePenalty = Math.max(0, Math.min(currentMorale - 100, currentCap - 100));
+
+            // Apply government modifier
+            const governmentMultiplier = game.global.civic?.govern?.type === 'democracy' ? 0.9 : 1;
+
+            return basePenalty * governmentMultiplier;
+        },
+
+        getAuthorityFromPenalty(idleSoldiers, penalty, data) {
+            return 80 + (data.multipliers.scale * idleSoldiers) - penalty;
+        },
+
         // Calculate optimal entertainer count based on authority
-        calculateOptimalEntertainers(authorityMin = null) {
+        calculateOptimalEntertainers(authorityMin = null, options = {}) {
             const data = this.getAuthorityData();
             if (!data) return null;
 
             const minReserve = authorityMin !== null ? authorityMin : this._authorityMin;
+            const targetMorale = options.targetMorale ?? null;
+
+            // Current state
+            const currentMorale = resources.Morale.currentQuantity;
+            const currentEntertainers = jobs.Entertainer.count;
+            const currentAuthority = data.current;
+            const baseMoraleCap = resources.Morale.maxStorage;
+            const maxEntertainers = jobs.Entertainer.max;
+            const hasSuperstar = haveTech("superstar");
 
             // Morale per entertainer
             const entertainerMorale =
@@ -6103,62 +6154,87 @@
                 * (state.astroSign === 'sagittarius' ? 1.05 : 1)
                 * (game.global.race['lone_survivor'] ? 25 : 1);
 
-            const currentMorale = resources.Morale.currentQuantity;
-            const baseMoraleCap = resources.Morale.maxStorage;
-            const maxEntertainers = jobs.Entertainer.max;
-            const hasSuperstar = haveTech("superstar");
+            // Assess current situation and determine direction
+            const authorityRoom = currentAuthority - minReserve;
+            const currentMoraleCap = this.getMoraleCap(currentEntertainers, hasSuperstar, baseMoraleCap);
+            const moraleRoom = currentMoraleCap - currentMorale;
 
-            // Helper for morale cap with Superstar
-            function getMoraleCap(entertainers) {
-                if (hasSuperstar) {
-                    return Math.floor(baseMoraleCap * (1 + entertainers / 100));
+            // Determine if we should try to increase or decrease entertainers
+            let targetDirection = 0; // 0 = maintain, 1 = increase, -1 = decrease
+
+            if (currentAuthority < minReserve) {
+                // Below minimum authority - need to decrease entertainers
+                targetDirection = -1;
+            } else if (authorityRoom > entertainerMorale && (currentMorale < currentMoraleCap - entertainerMorale)) {
+                // Have authority room and morale room - try to increase
+                targetDirection = 1;
+            } else if (currentMorale >= currentMoraleCap && !hasSuperstar) {
+                // At morale cap without superstar - decrease entertainers
+                targetDirection = -1;
+            }
+            // else: maintain current (targetDirection = 0)
+
+            // Start from current state and explore in the determined direction
+            let bestEntertainers = currentEntertainers;
+            let bestAuthority = currentAuthority;
+            let bestMorale = currentMorale;
+
+            // If we're exploring, try incremental changes
+            if (targetDirection !== 0) {
+                let testEntertainers = currentEntertainers;
+                let testMorale = currentMorale;
+
+                // Explore in the target direction
+                while (true) {
+                    let nextEntertainers = testEntertainers + targetDirection;
+
+                    // Bounds check
+                    if (nextEntertainers < 0 || nextEntertainers > maxEntertainers) {
+                        break;
+                    }
+
+                    // Calculate what would happen with this change
+                    let nextMorale = testMorale + (targetDirection * entertainerMorale);
+                    let nextMoraleCap = this.getMoraleCap(nextEntertainers, hasSuperstar, baseMoraleCap);
+
+                    // Check morale cap constraint (for non-superstar)
+                    if (!hasSuperstar && nextMorale > nextMoraleCap) {
+                        break;
+                    }
+
+                    // Check target morale constraint
+                    if (targetMorale !== null && nextMorale > targetMorale) {
+                        break;
+                    }
+
+                    // Calculate authority impact
+                    let penalty = this.getMoralePenalty(nextMorale, nextMoraleCap);
+                    let nextAuthority = this.getAuthorityFromPenalty(data.soldiers.total, penalty, data);
+
+                    // Check authority constraint
+                    if (nextAuthority < minReserve) {
+                        break;
+                    }
+
+                    // This change is valid - update our test values and continue
+                    testEntertainers = nextEntertainers;
+                    testMorale = nextMorale;
+                    bestEntertainers = nextEntertainers;
+                    bestAuthority = nextAuthority;
+                    bestMorale = nextMorale;
                 }
-                return baseMoraleCap;
-            }
-
-            // Helper for authority penalty
-            function getMoralePenalty(morale, cap) {
-                return Math.max(0, Math.min(morale - 100, cap - 100));
-            }
-
-            // Helper for authority calculation (matches getAuthorityData)
-            function getAuthority(idleSoldiers, penalty) {
-                // Use cached scale from getAuthorityData for consistency
-                return 80 + (data.multipliers.scale * idleSoldiers) - penalty;
-            }
-
-            // Simulate incrementally
-            let optimal = 0;
-            let morale = currentMorale;
-            let entertainers = 0;
-            let idleSoldiers = data.soldiers.total; // If entertainers pull from idle, adjust here if needed
-            let authority = data.current;
-
-            for (let i = 1; i <= maxEntertainers; i++) {
-                let nextMorale = morale + entertainerMorale;
-                let nextCap = getMoraleCap(i);
-                let penalty = getMoralePenalty(nextMorale, nextCap);
-                let nextAuthority = getAuthority(idleSoldiers, penalty);
-
-                // Stop if authority would drop below reserve
-                if (nextAuthority < minReserve) break;
-
-                // Stop if morale would exceed cap (unless Superstar is present)
-                if (!hasSuperstar && nextMorale > nextCap) break;
-
-                // Accept this assignment
-                morale = nextMorale;
-                authority = nextAuthority;
-                entertainers = i;
             }
 
             return {
-                optimal: entertainers,
-                maxPossible: maxEntertainers,
-                resultingMorale: morale,
-                resultingAuthority: authority,
-                resultingMoraleCap: getMoraleCap(entertainers),
+                optimal: bestEntertainers,
+                current: currentEntertainers,
+                delta: bestEntertainers - currentEntertainers,
+                resultingMorale: bestMorale,
+                resultingAuthority: bestAuthority,
+                resultingMoraleCap: this.getMoraleCap(bestEntertainers, hasSuperstar, baseMoraleCap),
                 authorityMin: minReserve,
+                authorityRoom: authorityRoom,
+                direction: targetDirection,
                 entertainerMorale: entertainerMorale,
                 hasSuperstar: hasSuperstar
             };
