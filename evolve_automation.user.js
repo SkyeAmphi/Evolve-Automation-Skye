@@ -5997,7 +5997,7 @@
 
             // Starting resource values
             const currentAuthority = resources.Authority.currentQuantity || 0;
-            const maxAuthority = resources.Authority.maxStorage;
+            const maxAuthority = resources.Authority.maxQuantity;
             const currentMorale = resources.Morale.currentQuantity;
 
             // Soldier calculations (keep the existing logic for now)
@@ -6101,7 +6101,7 @@
 
         // For calculating new or existing morale caps
         getMoraleCap(entertainers) {
-            const currentMoraleCap = resources.Morale.maxStorage;
+            const currentMoraleCap = resources.Morale.maxQuantity;
             const currentEntertainers = jobs.Entertainer.count;
             const hasSuperstar = haveTech("superstar");
 
@@ -6142,7 +6142,7 @@
             const currentMorale = resources.Morale.currentQuantity;
             const currentEntertainers = jobs.Entertainer.count;
             const currentAuthority = data.current;
-            const baseMoraleCap = resources.Morale.maxStorage;
+            const baseMoraleCap = resources.Morale.maxQuantity;
             const maxEntertainers = jobs.Entertainer.max;
             const hasSuperstar = haveTech("superstar");
 
