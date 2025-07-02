@@ -9744,35 +9744,30 @@
                         state.maxSpaceMiners = Math.max(state.maxSpaceMiners, Math.min(availableEmployees, job.breakpointEmployees(i, true)));
                     }
                     if (job === jobs.Entertainer) {
-                        // Only enter smart entertainer management if we actually need smart limits
+                        // Smart entertainer management for authority or to avoid wasting entertainers
                         if (AuthorityManager.hasAuthority() || !haveTech("superstar")) {
                             if (jobMax[j] === undefined) {
                                 let taxBuffer = (settings.autoTax || haveTask("tax")) && game.global.civic.taxes.tax_rate < poly.taxCap(false) ? 1 : 0;
-                                let entertainerMorale = (game.global.tech['theatre'] + traitVal('musical', 0))
-                                    * traitVal('emotionless', 0, '-') * traitVal('high_pop', 1, '=')
-                                    * (state.astroSign === 'sagittarius' ? 1.05 : 1)
-                                    * (game.global.race['lone_survivor'] ? 25 : 1);
 
                                 if (AuthorityManager.hasAuthority()) {
                                     // Evil universe - use authority-based management
                                     const entertainerCalc = AuthorityManager.calculateOptimalEntertainers();
                                     if (entertainerCalc) {
-
-                                        // Use authority-based calculation with hysteresis
+                                        // hysteresis to reduce flickering
                                         const hysteresis = 1;
                                         jobMax[j] = Math.abs(job.count - entertainerCalc.optimal) > hysteresis
                                             ? entertainerCalc.optimal
                                             : job.count;
-                                    } else {
-                                        // Fallback to standard calculation
-                                        let moraleExtra = resources.Morale.rateOfChange - resources.Morale.maxQuantity - taxBuffer;
-                                        jobMax[j] = Math.max(0, job.count - Math.floor(moraleExtra / entertainerMorale));
                                     }
-                                } else {
-                                    // Non-evil universe without superstar - limit to avoid waste at morale cap
-                                    let moraleExtra = resources.Morale.rateOfChange - resources.Morale.maxQuantity - taxBuffer;
-                                    jobMax[j] = Math.max(0, job.count - Math.floor(moraleExtra / entertainerMorale));
                                 }
+
+                                // Standard calculation for non-evil universe or evil universe fallback
+                                let entertainerMorale = (game.global.tech['theatre'] + traitVal('musical', 0))
+                                    * traitVal('emotionless', 0, '-') * traitVal('high_pop', 1, '=')
+                                    * (state.astroSign === 'sagittarius' ? 1.05 : 1)
+                                    * (game.global.race['lone_survivor'] ? 25 : 1);
+                                let moraleExtra = resources.Morale.rateOfChange - resources.Morale.maxQuantity - taxBuffer;
+                                jobMax[j] = Math.max(0, job.count - Math.floor(moraleExtra / entertainerMorale));
                             }
                             jobsToAssign = Math.min(jobsToAssign, jobMax[j]);
                         }
