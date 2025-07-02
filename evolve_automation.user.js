@@ -5995,8 +5995,12 @@
                 return null;
             }
 
-            const authority = resources.Authority.currentQuantity || 0; // current authority
+            // Starting resource values
+            const currentAuthority = resources.Authority.currentQuantity || 0;
             const maxAuthority = resources.Authority.maxStorage;
+            const currentMorale = resources.Morale.currentQuantity;
+
+            // Soldier calculations (keep the existing logic for now)
             let garrisonSoldiers = WarManager.currentCityGarrison;
 
             // during Warlord, soul forge soldiers take away from city soldiers
@@ -6010,7 +6014,6 @@
             // Determine number of hell soldiers contributing to authority, which does not include soldiers on patrol
             let idleHellSoldiers = 0;
             if (game.global.portal && game.global.portal.fortress && typeof game.global.portal.fortress.garrison === 'number') {
-
                 const totalHellSoldiers = game.global.portal.fortress.garrison;
                 const patrolSoldiers = (game.global.portal.fortress.patrols || 0) *
                     (game.global.portal.fortress.patrol_size || 0);
@@ -6032,18 +6035,15 @@
 
             const authorityGain = authoriTroopers * authScale;
 
-            // Calculate morale effect on authority
-            let moraleLoss = Math.max(0, resources.Morale.currentQuantity - 100);
-            if (game.global.civic.govern.type === 'democracy') {
-                moraleLoss *= 0.9;
-            }
+            const moralePenalty = this.getAuthorityPenaltyFromMorale(currentMorale);
+            const netGain = authorityGain - moralePenalty;
 
             const data = {
-                current: authority,
+                current: currentAuthority,
                 max: maxAuthority,
                 gain: authorityGain,
-                moraleLoss: moraleLoss,
-                netGain: authorityGain - moraleLoss,
+                moralePenalty: moralePenalty,
+                netGain: netGain,
                 soldiers: {
                     garrison: garrisonSoldiers,
                     hell: idleHellSoldiers,
@@ -6051,15 +6051,11 @@
                 },
                 multipliers: {
                     base: baseAuthority,
-                    perSoldier: authScale,
-                    highPop: highPopMultiplier,
-                    scale: authScale
+                    scale: authScale,
+                    highPop: highPopMultiplier
                 },
                 government: {
-                    type: game.global.civic?.govern?.type || 'anarchy',
-                    bonus: (game.global.civic?.govern?.type === "autocracy" && 1.08)
-                        || (game.global.civic?.govern?.type === "dictator" && 1.12)
-                        || 1
+                    type: game.global.civic?.govern?.type || 'anarchy'
                 }
             };
 
