@@ -6066,28 +6066,24 @@
             return data;
         },
 
-        // Get authority penalty from current or specified morale and cap
-        // This is the core calculation that many other methods depend on
-        getAuthorityPenalty(morale = null, cap = null) {
-            if (!this.hasAuthority()) return 0;
+        // Get authority penalty from current or specified morale
+        getAuthorityPenaltyFromMorale(morale = null) {
 
-            const data = this.getAuthorityData();
-            const currentMorale = morale ?? data.morale;
-            const moraleCap = cap ?? data.moraleCap;
+            // Use current morale if not specified
+            const currentMorale = morale !== null ? morale : resources.Morale.currentQuantity;
 
-            // No penalty if morale is at or above cap
-            if (currentMorale >= moraleCap) return 0;
+            // No penalty if morale is 100 or below
+            if (currentMorale <= 100) return 0;
 
-            // Calculate penalty: each point below cap costs authority
-            const moraleDeficit = moraleCap - currentMorale;
-            const penaltyRate = game.global.race['blissful'] ? 0.25 : 0.5;
+            // Calculate penalty: each point above 100 costs authority
+            const moraleAbove100 = currentMorale - 100;
+            const penaltyRate = game.global.civic?.govern?.type === 'democracy' ? 0.9 : 1;
 
-            return Math.round(moraleDeficit * penaltyRate);
+            return Math.round(moraleAbove100 * penaltyRate);
         },
 
-        // Convenience method - keeping the old name for compatibility
-        getAuthorityPenaltyFromMorale(morale = null, cap = null) {
-            return this.getAuthorityPenalty(morale, cap);
+        getAuthorityAfterPenalty(authoriTroopers, penalty, data) {
+            return 80 + (data.multipliers.scale * authoriTroopers) - penalty;
         },
 
         // Get available authority after accounting for minimum reserve
@@ -6110,24 +6106,6 @@
 
             // Calculate what the cap would be with the specified number of entertainers
             return hasSuperstar ? baseMoraleCap + entertainers : baseMoraleCap;
-        },
-
-        getAuthorityPenaltyFromMorale(morale = null, cap = null) { // duplicate of getAuthorityPenalty
-            // Use current values if not provided
-            const currentMorale = morale !== null ? morale : resources.Morale.currentQuantity;
-            const currentCap = cap !== null ? cap : resources.Morale.maxQuantity;
-
-            // Calculate base penalty (morale above 100, capped by cap above 100)
-            const basePenalty = Math.max(0, Math.min(currentMorale - 100, currentCap - 100));
-
-            // Apply government modifier
-            const governmentMultiplier = game.global.civic?.govern?.type === 'democracy' ? 0.9 : 1;
-
-            return basePenalty * governmentMultiplier;
-        },
-
-        getAuthorityFromPenalty(idleSoldiers, penalty, data) {
-            return 80 + (data.multipliers.scale * idleSoldiers) - penalty;
         },
 
         // Calculate optimal entertainer count based on authority
@@ -6253,14 +6231,6 @@
         hasSufficientAuthority(requiredAmount, authorityMin = null) {
             const available = this.getAvailableAuthority(authorityMin);
             return available >= requiredAmount;
-        },
-
-        // Get authority efficiency (how much authority per soldier)
-        getAuthorityEfficiency() {
-            const data = this.getAuthorityData();
-            if (!data) return 0;
-
-            return data.multipliers.scale;
         },
 
         // Set minimum authority target (for user configuration)
