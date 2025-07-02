@@ -6120,7 +6120,6 @@
             const currentMorale = resources.Morale.currentQuantity;
             const currentEntertainers = jobs.Entertainer.count;
             const currentAuthority = data.current;
-            const baseMoraleCap = resources.Morale.maxQuantity;
             const maxEntertainers = jobs.Entertainer.max;
             const hasSuperstar = haveTech("superstar");
 
@@ -6134,7 +6133,7 @@
 
             // Assess current situation and determine direction
             const authorityRoom = currentAuthority - minReserve;
-            const currentMoraleCap = this.getMoraleCap(currentEntertainers, hasSuperstar, baseMoraleCap);
+            const currentMoraleCap = this.getMoraleCap(currentEntertainers);
             const moraleRoom = currentMoraleCap - currentMorale;
 
             // Determine if we should try to increase or decrease entertainers
@@ -6173,7 +6172,7 @@
 
                     // Calculate what would happen with this change
                     let nextMorale = testMorale + (targetDirection * entertainerMorale);
-                    let nextMoraleCap = this.getMoraleCap(nextEntertainers, hasSuperstar, baseMoraleCap);
+                    let nextMoraleCap = this.getMoraleCap(nextEntertainers);
 
                     // Check morale cap constraint (for non-superstar)
                     if (!hasSuperstar && nextMorale > nextMoraleCap) {
@@ -6185,9 +6184,9 @@
                         break;
                     }
 
-                    // Calculate authority impact
-                    let penalty = this.getMoralePenalty(nextMorale, nextMoraleCap);
-                    let nextAuthority = this.getAuthorityFromPenalty(data.soldiers.total, penalty, data);
+                    // Calculate authority impact using existing method
+                    let penalty = this.getAuthorityPenaltyFromMorale(nextMorale);
+                    let nextAuthority = this.getAuthorityAfterPenalty(data.soldiers.total, penalty, data);
 
                     // Check authority constraint
                     if (nextAuthority < minReserve) {
@@ -6209,7 +6208,7 @@
                 delta: bestEntertainers - currentEntertainers,
                 resultingMorale: bestMorale,
                 resultingAuthority: bestAuthority,
-                resultingMoraleCap: this.getMoraleCap(bestEntertainers, hasSuperstar, baseMoraleCap),
+                resultingMoraleCap: this.getMoraleCap(bestEntertainers),
                 authorityMin: minReserve,
                 authorityRoom: authorityRoom,
                 direction: targetDirection,
@@ -9813,16 +9812,19 @@
                                         jobMax[j] = Math.abs(job.count - entertainerCalc.optimal) > hysteresis
                                             ? entertainerCalc.optimal
                                             : job.count;
+                                    } else {
+                                        // Fallback if calculation fails
+                                        jobMax[j] = job.count;
                                     }
+                                } else {
+                                    // Standard calculation for non-evil universe or evil universe fallback
+                                    let entertainerMorale = (game.global.tech['theatre'] + traitVal('musical', 0))
+                                        * traitVal('emotionless', 0, '-') * traitVal('high_pop', 1, '=')
+                                        * (state.astroSign === 'sagittarius' ? 1.05 : 1)
+                                        * (game.global.race['lone_survivor'] ? 25 : 1);
+                                    let moraleExtra = resources.Morale.rateOfChange - resources.Morale.maxQuantity - taxBuffer;
+                                    jobMax[j] = Math.max(0, job.count - Math.floor(moraleExtra / entertainerMorale));
                                 }
-
-                                // Standard calculation for non-evil universe or evil universe fallback
-                                let entertainerMorale = (game.global.tech['theatre'] + traitVal('musical', 0))
-                                    * traitVal('emotionless', 0, '-') * traitVal('high_pop', 1, '=')
-                                    * (state.astroSign === 'sagittarius' ? 1.05 : 1)
-                                    * (game.global.race['lone_survivor'] ? 25 : 1);
-                                let moraleExtra = resources.Morale.rateOfChange - resources.Morale.maxQuantity - taxBuffer;
-                                jobMax[j] = Math.max(0, job.count - Math.floor(moraleExtra / entertainerMorale));
                             }
                             jobsToAssign = Math.min(jobsToAssign, jobMax[j]);
                         }
