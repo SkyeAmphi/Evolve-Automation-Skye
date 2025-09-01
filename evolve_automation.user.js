@@ -5600,26 +5600,75 @@
             hover:  { sand: 1,    swamp: 1.2,  forest: 0.48, jungle: 0.35, rocky: 0.68, gravel: 1,    muddy: 1.08, grass: 1,    brush: 0.7,  concrete: 1}
         },
         StatusMod: {
-            freeze: (mech) => !mech.equip.includes('radiator') ? 0.25 : 1,
-            hot: (mech) => !mech.equip.includes('coolant') ? 0.25 : 1,
-            corrosive: (mech) => !mech.equip.includes('ablative') ? mech.equip.includes('shields') ? 0.75 : 0.25 : 1,
-            humid: (mech) => !mech.equip.includes('seals') ? 0.75 : 1,
-            windy: (mech) => mech.chassis === 'hover' ? 0.5 : 1,
-            hilly: (mech) => mech.chassis !== 'spider' ? 0.75 : 1,
-            mountain: (mech) => mech.chassis !== 'spider' && !mech.equip.includes('grapple') ? mech.equip.includes('flare') ? 0.75 : 0.5 : 1,
-            radioactive: (mech) => !mech.equip.includes('shields') ? 0.5 : 1,
-            quake: (mech) => !mech.equip.includes('stabilizer') ? 0.25 : 1,
-            dust: (mech) => !mech.equip.includes('seals') ? 0.5 : 1,
-            river: (mech) => mech.chassis !== 'hover' ? 0.65 : 1,
-            tar: (mech) => mech.chassis !== 'quad' ? mech.chassis === 'tread' || mech.chassis === 'wheel' ? 0.5 : 0.75 : 1,
-            steam: (mech) => !mech.equip.includes('shields') ? 0.75 : 1,
-            flooded: (mech) => mech.chassis !== 'hover' ? 0.35 : 1,
-            fog: (mech) => !mech.equip.includes('sonar') ? 0.2 : 1,
-            rain: (mech) => !mech.equip.includes('seals') ? 0.75 : 1,
-            hail: (mech) => !mech.equip.includes('ablative') && !mech.equip.includes('shields') ? 0.75 : 1,
-            chasm: (mech) => !mech.equip.includes('grapple') ? 0.1 : 1,
-            dark: (mech) => !mech.equip.includes('infrared') ? mech.equip.includes('flare') ? 0.25 : 0.1 : 1,
-            gravity: (mech) => mech.size === 'titan' ? 0.25 : mech.size === 'large' ? 0.45 : mech.size === 'medium' ? 0.8 : 1,
+            freeze: (mech) => mech.equip.includes('radiator') || mech.equip.includes('cold') ? 1 : 0.25,
+            hot: (mech) => mech.equip.includes('coolant') || mech.equip.includes('heat') ? 1 : 0.25,
+            corrosive: (mech) => {
+                if (mech.equip.includes('ablative')) return 1;
+                if (mech.equip.includes('stoneskin')) return 0.9;
+                if (mech.equip.includes('shields')) return 0.75;
+                if (mech.equip.includes('manashield')) return 0.5;
+                return 0.25;
+            },
+            humid: (mech) => {
+                if (mech.equip.includes('seals')) return 1;
+                if (mech.equip.includes('heat')) return 0.85;
+                return 0.75;
+            },
+            windy: (mech) => ['hover', 'flying_imp', 'harpy', 'dragon'].includes(mech.chassis) ? 0.5 : 1, // lol skill issue, imagine losing to a breeze
+            hilly: (mech) => ['spider', 'flying_imp', 'harpy', 'dragon'].includes(mech.chassis) ? 1 : 0.75,
+            mountain: (mech) => {
+                if (mech.chassis === 'spider' || mech.equip.includes('grapple')) return 1;
+                if (mech.equip.includes('flare') || mech.equip.includes('echo')) return 0.75;
+                return 0.5;
+            },
+            radioactive: (mech) => mech.equip.includes('shields') || !mech.equip.includes('manashield') ? 1 : 0.5, // TODO remove the ! on the manashield check once https://github.com/pmotschmann/Evolve/pull/1497 is live
+            quake: (mech) => {
+                if (mech.equip.includes('stabilizer')) return 1;
+                if (mech.equip.includes('athletic')) return 0.75;
+                return 0.25;
+            },
+            dust: (mech) => mech.equip.includes('seals') || mech.equip.includes('thermal') ? 1 : 0.5,
+            river: (mech) => ['hover', 'flying_imp', 'harpy', 'dragon'].includes(mech.chassis) ? 1 : 0.65,
+            tar: (mech) => {
+                if (mech.chassis === 'quad') return 1;
+                if (['tread', 'wheel'].includes(mech.chassis)) return 0.5;
+                return 0.75;
+            },
+            steam: (mech) => mech.equip.includes('shields') || mech.equip.includes('heat') ? 1 : 0.75,
+            flooded: (mech) => {
+                if (mech.chassis === 'hover') return 1;
+                if (mech.chassis === 'snake') return 0.85;
+                return 0.35;
+            },
+            fog: (mech) => mech.equip.includes('sonar') || mech.equip.includes('echo') ? 1 : 0.2,
+            rain: (mech) => {
+                if (mech.equip.includes('seals')) return 1;
+                if (mech.equip.includes('cold')) return 0.9;
+                return 0.75;
+            },
+            hail: (mech) => mech.equip.includes('ablative') || mech.equip.includes('shields') || mech.equip.includes('manashield') || mech.equip.includes('stoneskin') ? 1 : 0.75,
+            chasm: (mech) => {
+                if (mech.equip.includes('grapple') || ['flying_imp', 'harpy', 'dragon'].includes(mech.chassis)) return 1;
+                if (mech.equip.includes('athletic')) return 0.35;
+                return 0.1;
+            },
+            dark: (mech) => {
+                if (mech.equip.includes('infrared') || mech.equip.includes('darkvision')) return 1;
+                if (mech.equip.includes('flare')) return 0.25;
+                return 0.1;
+            },
+            gravity: (mech) => {
+                const sizeRatings = {
+                    'medium': 0.8, 'fiend': 0.8,
+                    'large': 0.45, 'cyberdemon': 0.45, // cyberdemon should be 0.5 after gravity is fixed
+                    'titan': 0.25, 'archfiend': 0.25 // archfiend should be 0.35
+                };
+
+                let rating = sizeRatings[mech.size] ?? 1;
+                if (['flying_imp', 'harpy', 'dragon'].includes(mech.chassis)) rating -= 0.15;
+                if (mech.equip.includes('athletic') && rating < 1) rating += 0.1;
+                return Math.max(0, rating);
+            },
         },
 
         get collectorValue() {
