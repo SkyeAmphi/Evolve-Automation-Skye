@@ -5576,20 +5576,36 @@
         bestBody: {},
         bestWeapon: [],
 
-        Size: ['small','medium','large','titan','collector'],
-        Chassis: ['wheel','tread','biped','quad','spider','hover'],
-        Weapon: ['laser','kinetic','shotgun','missile','flame','plasma','sonic','tesla'],
-        Equip: ['special','shields','sonar','grapple','infrared','flare','radiator','coolant','ablative','stabilizer','seals'],
+        Size: ['small','minion','medium','fiend','large','cyberdemon','titan','archfiend','collector'],
+        Chassis: ['wheel','tread','biped','quad','spider','hover','imp','flying_imp','hound','harpy','barghest','cambion','minotaur','nightmare','rakshasa','golem','dragon','snake','gorgon','hydra'],
+        Weapon: ['laser','kinetic','shotgun','missile','flame','plasma','sonic','tesla','claws','venom','cold','shock','fire','acid','stone','iron','flesh','ice','magma','axe','hammer'],
+        Equip: ['special','shields','sonar','grapple','infrared','flare','radiator','coolant','ablative','stabilizer','seals', // Normal mechs + Cyberdemons equipment
+                'scavenger','scouter','darkvision','echo','thermal','manashield','cold','heat','athletic','lucky','stoneskin'], // Minions, Fiends and Archfiends equipment
 
-        SizeSlots: {small: 0, medium: 1, large: 2, titan: 4, collector: 2},
-        SizeWeapons: {small: 1, medium: 1, large: 2, titan: 4, collector: 0},
+        SizeSlots: {small: 0, minion: 0, medium: 1, fiend: 1, large: 2, cyberdemon: 2, titan: 4, archfiend: 4, collector: 2},
+        SizeWeapons: {small: 1, minion: 1, medium: 1, fiend: 1, large: 2, cyberdemon: 2, titan: 4, archfiend: 2, collector: 0}, // Hydra Archfiends get 4 weapons, we'll handle this in getRandomMech instead
         SmallChassisMod: {
             wheel:  { sand: 0.9,  swamp: 0.35, forest: 1,    jungle: 0.92, rocky: 0.65, gravel: 1,    muddy: 0.85, grass: 1.3,  brush: 0.9,  concrete: 1.1},
             tread:  { sand: 1.15, swamp: 0.55, forest: 1,    jungle: 0.95, rocky: 0.65, gravel: 1.3,  muddy: 0.88, grass: 1,    brush: 1,    concrete: 1},
             biped:  { sand: 0.78, swamp: 0.68, forest: 1,    jungle: 0.82, rocky: 0.48, gravel: 1,    muddy: 0.85, grass: 1.25, brush: 0.92, concrete: 1},
             quad:   { sand: 0.86, swamp: 0.58, forest: 1.25, jungle: 1,    rocky: 0.95, gravel: 0.9,  muddy: 0.68, grass: 1,    brush: 0.95, concrete: 1},
             spider: { sand: 0.75, swamp: 0.9,  forest: 0.82, jungle: 0.77, rocky: 1.25, gravel: 0.86, muddy: 0.92, grass: 1,    brush: 1,    concrete: 1},
-            hover:  { sand: 1,    swamp: 1.35, forest: 0.65, jungle: 0.55, rocky: 0.82, gravel: 1,    muddy: 1.15, grass: 1,    brush: 0.78, concrete: 1}
+            hover:  { sand: 1,    swamp: 1.35, forest: 0.65, jungle: 0.55, rocky: 0.82, gravel: 1,    muddy: 1.15, grass: 1,    brush: 0.78, concrete: 1},
+            // Warlord chassis (mapped to their equivalent standard chassis)
+            nightmare: { sand: 0.9,  swamp: 0.35, forest: 1,    jungle: 0.92, rocky: 0.65, gravel: 1,    muddy: 0.85, grass: 1.3,  brush: 0.9,  concrete: 1.1}, // wheel equivalent
+            hound:     { sand: 0.9,  swamp: 0.35, forest: 1,    jungle: 0.92, rocky: 0.65, gravel: 1,    muddy: 0.85, grass: 1.3,  brush: 0.9,  concrete: 1.1}, // wheel equivalent
+            rakshasa:  { sand: 1.15, swamp: 0.55, forest: 1,    jungle: 0.95, rocky: 0.65, gravel: 1.3,  muddy: 0.88, grass: 1,    brush: 1,    concrete: 1}, // tread equivalent
+            harpy:     { sand: 1.15, swamp: 0.55, forest: 1,    jungle: 0.95, rocky: 0.65, gravel: 1.3,  muddy: 0.88, grass: 1,    brush: 1,    concrete: 1}, // tread equivalent
+            dragon:    { sand: 1.15, swamp: 0.55, forest: 1,    jungle: 0.95, rocky: 0.65, gravel: 1.3,  muddy: 0.88, grass: 1,    brush: 1,    concrete: 1}, // tread equivalent
+            cambion:   { sand: 0.78, swamp: 0.68, forest: 1,    jungle: 0.82, rocky: 0.48, gravel: 1,    muddy: 0.85, grass: 1.25, brush: 0.92, concrete: 1}, // biped equivalent
+            imp:       { sand: 0.78, swamp: 0.68, forest: 1,    jungle: 0.82, rocky: 0.48, gravel: 1,    muddy: 0.85, grass: 1.25, brush: 0.92, concrete: 1}, // biped equivalent
+            gorgon:    { sand: 0.78, swamp: 0.68, forest: 1,    jungle: 0.82, rocky: 0.48, gravel: 1,    muddy: 0.85, grass: 1.25, brush: 0.92, concrete: 1}, // biped equivalent
+            golem:     { sand: 0.86, swamp: 0.58, forest: 1.25, jungle: 1,    rocky: 0.95, gravel: 0.9,  muddy: 0.68, grass: 1,    brush: 0.95, concrete: 1}, // quad equivalent
+            barghest:  { sand: 0.86, swamp: 0.58, forest: 1.25, jungle: 1,    rocky: 0.95, gravel: 0.9,  muddy: 0.68, grass: 1,    brush: 0.95, concrete: 1}, // quad equivalent
+            minotaur:  { sand: 0.75, swamp: 0.9,  forest: 0.82, jungle: 0.77, rocky: 1.25, gravel: 0.86, muddy: 0.92, grass: 1,    brush: 1,    concrete: 1}, // spider equivalent
+            hydra:     { sand: 0.75, swamp: 0.9,  forest: 0.82, jungle: 0.77, rocky: 1.25, gravel: 0.86, muddy: 0.92, grass: 1,    brush: 1,    concrete: 1}, // spider equivalent
+            flying_imp:{ sand: 1,    swamp: 1.35, forest: 0.65, jungle: 0.55, rocky: 0.82, gravel: 1,    muddy: 1.15, grass: 1,    brush: 0.78, concrete: 1}, // hover equivalent
+            snake:     { sand: 1,    swamp: 1.35, forest: 0.65, jungle: 0.55, rocky: 0.82, gravel: 1,    muddy: 1.15, grass: 1,    brush: 0.78, concrete: 1}, // hover equivalent
         },
         LargeChassisMod: {
             wheel:  { sand: 0.85, swamp: 0.18, forest: 1,    jungle: 0.85, rocky: 0.5,  gravel: 0.95, muddy: 0.58, grass: 1.2,  brush: 0.8,  concrete: 1},
@@ -5597,7 +5613,22 @@
             biped:  { sand: 0.65, swamp: 0.5,  forest: 0.95, jungle: 0.7,  rocky: 0.4,  gravel: 1,    muddy: 0.7,  grass: 1.2,  brush: 0.85, concrete: 1},
             quad:   { sand: 0.75, swamp: 0.42, forest: 1.2,  jungle: 1,    rocky: 0.9,  gravel: 0.8,  muddy: 0.5,  grass: 0.95, brush: 0.9,  concrete: 1},
             spider: { sand: 0.65, swamp: 0.78, forest: 0.75, jungle: 0.65, rocky: 1.2,  gravel: 0.75, muddy: 0.82, grass: 1,    brush: 0.95, concrete: 1},
-            hover:  { sand: 1,    swamp: 1.2,  forest: 0.48, jungle: 0.35, rocky: 0.68, gravel: 1,    muddy: 1.08, grass: 1,    brush: 0.7,  concrete: 1}
+            hover:  { sand: 1,    swamp: 1.2,  forest: 0.48, jungle: 0.35, rocky: 0.68, gravel: 1,    muddy: 1.08, grass: 1,    brush: 0.7,  concrete: 1},
+            // Warlord chassis (mapped to their equivalent standard chassis)
+            nightmare: { sand: 0.85, swamp: 0.18, forest: 1,    jungle: 0.85, rocky: 0.5,  gravel: 0.95, muddy: 0.58, grass: 1.2,  brush: 0.8,  concrete: 1}, // wheel equivalent
+            hound:     { sand: 0.85, swamp: 0.18, forest: 1,    jungle: 0.85, rocky: 0.5,  gravel: 0.95, muddy: 0.58, grass: 1.2,  brush: 0.8,  concrete: 1}, // wheel equivalent
+            rakshasa:  { sand: 1.1,  swamp: 0.4,  forest: 0.95, jungle: 0.9,  rocky: 0.5,  gravel: 1.2,  muddy: 0.72, grass: 1,    brush: 1,    concrete: 1}, // tread equivalent
+            harpy:     { sand: 1.1,  swamp: 0.4,  forest: 0.95, jungle: 0.9,  rocky: 0.5,  gravel: 1.2,  muddy: 0.72, grass: 1,    brush: 1,    concrete: 1}, // tread equivalent
+            dragon:    { sand: 1.1,  swamp: 0.4,  forest: 0.95, jungle: 0.9,  rocky: 0.5,  gravel: 1.2,  muddy: 0.72, grass: 1,    brush: 1,    concrete: 1}, // tread equivalent
+            cambion:   { sand: 0.65, swamp: 0.5,  forest: 0.95, jungle: 0.7,  rocky: 0.4,  gravel: 1,    muddy: 0.7,  grass: 1.2,  brush: 0.85, concrete: 1}, // biped equivalent
+            imp:       { sand: 0.65, swamp: 0.5,  forest: 0.95, jungle: 0.7,  rocky: 0.4,  gravel: 1,    muddy: 0.7,  grass: 1.2,  brush: 0.85, concrete: 1}, // biped equivalent
+            gorgon:    { sand: 0.65, swamp: 0.5,  forest: 0.95, jungle: 0.7,  rocky: 0.4,  gravel: 1,    muddy: 0.7,  grass: 1.2,  brush: 0.85, concrete: 1}, // biped equivalent
+            golem:     { sand: 0.75, swamp: 0.42, forest: 1.2,  jungle: 1,    rocky: 0.9,  gravel: 0.8,  muddy: 0.5,  grass: 0.95, brush: 0.9,  concrete: 1}, // quad equivalent
+            barghest:  { sand: 0.75, swamp: 0.42, forest: 1.2,  jungle: 1,    rocky: 0.9,  gravel: 0.8,  muddy: 0.5,  grass: 0.95, brush: 0.9,  concrete: 1}, // quad equivalent
+            minotaur:  { sand: 0.65, swamp: 0.78, forest: 0.75, jungle: 0.65, rocky: 1.2,  gravel: 0.75, muddy: 0.82, grass: 1,    brush: 0.95, concrete: 1}, // spider equivalent
+            hydra:     { sand: 0.65, swamp: 0.78, forest: 0.75, jungle: 0.65, rocky: 1.2,  gravel: 0.75, muddy: 0.82, grass: 1,    brush: 0.95, concrete: 1}, // spider equivalent
+            flying_imp:{ sand: 1,    swamp: 1.2,  forest: 0.48, jungle: 0.35, rocky: 0.68, gravel: 1,    muddy: 1.08, grass: 1,    brush: 0.7,  concrete: 1}, // hover equivalent
+            snake:     { sand: 1,    swamp: 1.2,  forest: 0.48, jungle: 0.35, rocky: 0.68, gravel: 1,    muddy: 1.08, grass: 1,    brush: 0.7,  concrete: 1}, // hover equivalent
         },
         StatusMod: {
             freeze: (mech) => mech.equip.includes('radiator') || mech.equip.includes('cold') ? 1 : 0.25,
@@ -5758,7 +5789,7 @@
 
         getBodyMod(mech) {
             let floor = game.global.portal.spire;
-            let terrainFactor = mech.size === 'small' || mech.size === 'medium' ?
+            let terrainFactor = mech.size === 'small' || mech.size === 'minion' || mech.size === 'medium' || mech.size === 'fiend' ?
                 this.SmallChassisMod[mech.chassis][floor.type]:
                 this.LargeChassisMod[mech.chassis][floor.type];
 
@@ -5780,15 +5811,23 @@
 
         getSizeMod(mech, concrete) {
             let isConcrete = concrete ?? game.global.portal.spire.type === 'concrete';
-            switch (mech.size){
+            switch (mech.size) {
                 case 'small':
+                    return 0.0015 * (isConcrete ? 0.92 : 1);
+                case 'minion':
                     return 0.0025 * (isConcrete ? 0.92 : 1);
                 case 'medium':
                     return 0.0075 * (isConcrete ? 0.95 : 1);
+                case 'fiend':
+                    return 0.006 * (isConcrete ? 0.95 : 1);
                 case 'large':
                     return 0.01;
+                case 'cyberdemon':
+                    return 0.009;
                 case 'titan':
                     return 0.012 * (isConcrete ? 1.25 : 1);
+                case 'archfiend':
+                    return 0.011 * (isConcrete ? 1.25 : 1);
                 case 'collector': // For collectors we're calculating supply rate
                     return 25 / this.collectorValue;
             }
@@ -5915,7 +5954,7 @@
         getRandomMech(size) {
             let randomBody = this.bestBody[size][Math.floor(Math.random() * this.bestBody[size].length)];
             let randomWeapon = this.bestWeapon[Math.floor(Math.random() * this.bestWeapon.length)];
-            let weaponsAmount = this.SizeWeapons[size];
+            let weaponsAmount = (size === 'archfiend' && randomBody.chassis === 'hydra') ? 4 : this.SizeWeapons[size];
             let mech = {hardpoint: new Array(weaponsAmount).fill(randomWeapon), ...randomBody};
             return {...mech, ...this.getMechStats(mech)};
         },
@@ -5924,12 +5963,20 @@
             switch (mech.size){
                 case 'small':
                     return 2;
+                case 'minion':
+                    return 1;
                 case 'medium':
                     return (prep ?? game.global.blood.prepared) >= 2 ? 4 : 5;
+                case 'fiend':
+                    return (prep ?? game.global.blood.prepared) >= 2 ? 3 : 4;
                 case 'large':
                     return (prep ?? game.global.blood.prepared) >= 2 ? 8 : 10;
+                case 'cyberdemon':
+                    return (prep ?? game.global.blood.prepared) >= 2 ? 6 : 8;
                 case 'titan':
                     return (prep ?? game.global.blood.prepared) >= 2 ? 20 : 25;
+                case 'archfiend':
+                    return (prep ?? game.global.blood.prepared) >= 2 ? 15 : 20;
                 case 'collector':
                     return 1;
             }
