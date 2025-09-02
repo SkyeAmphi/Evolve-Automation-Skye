@@ -3,8 +3,8 @@
 // @namespace    http://tampermonkey.net/
 // @version      3.3.1.146
 // @description  try to take over the world!
-// @downloadURL  https://github.com/SkyeAmphi/Evolve-Automation-Skye/raw/refs/heads/master/evolve_automation.user.js
-// @updateURL    https://github.com/SkyeAmphi/Evolve-Automation-Skye/raw/refs/heads/master/evolve_automation.meta.js
+// @downloadURL  https://github.com/SkyeAmphi/Evolve-Automation-Skye/raw/refs/heads/snippet-merge/evolve_automation.user.js
+// @updateURL    https://github.com/SkyeAmphi/Evolve-Automation-Skye/raw/refs/heads/snippet-merge/evolve_automation.meta.js
 // @author       Fafnir
 // @author       TMVictor
 // @author       Vollch
