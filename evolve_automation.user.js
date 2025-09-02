@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Evolve Skye
+// @name         Evolve Skye Kewne
 // @namespace    http://tampermonkey.net/
 // @version      3.3.1.146
 // @description  try to take over the world!
