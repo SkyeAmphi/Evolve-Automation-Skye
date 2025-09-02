@@ -5797,6 +5797,12 @@
             for (let effect in floor.status) {
                 rating *= this.StatusMod[effect](mech);
             }
+
+            // Lucky is a random bonus between 0.01 and 0.09, and is applied last
+            if (mech.equip.includes('lucky')) {
+                rating = Math.min(1, rating + 0.05); // for what the script does, it makes more sense here to just use the expected average
+            }
+
             return rating;
         },
 
