@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Evolve Skye
 // @namespace    http://tampermonkey.net/
-// @version      3.3.1.145
+// @version      3.3.1.146
 // @description  try to take over the world!
 // @downloadURL  https://github.com/SkyeAmphi/Evolve-Automation-Skye/raw/refs/heads/master/evolve_automation.user.js
 // @updateURL    https://github.com/SkyeAmphi/Evolve-Automation-Skye/raw/refs/heads/master/evolve_automation.meta.js
@@ -47,6 +47,7 @@
 //   Auto Smelter does adjust rate of Inferno fuel and Oil for best cost and efficiency, but only when Inferno directly above oil.
 //   All settings can be reset to default at once by importing {} as script settings.
 //   Autoclicker can trivialize many aspects of the game, and ruin experience. Spoil your game at your own risk!
+//   Use of some advanced features to run your own custom code can cause the game to freeze on load if you add an infinite loop. Add ?safemode to the game's URL to temporarily deactivate script processing while still allowing access to configuration.
 
 (function($) {
     'use strict';
@@ -70,6 +71,8 @@
 
     const CONSUMPTION_BALANCE_MIN = 60; // Seconds of used resources to keep
     const CONSUMPTION_BALANCE_TARGET = 120; // Seconds of used resources to try producing
+
+    let safeMode = String(window.location).toLowerCase().indexOf("safemode") !== -1;
 
     // Class definitions
 
@@ -1367,14 +1370,8 @@
         }
 
         isAffordable(max = false) {
-            // We can't use exposed checkAffordable with projects, so let's write it. Luckily project need only basic resources
-            let check = max ? "maxQuantity" : "currentQuantity";
-            for (let res in this.cost) {
-                if (resources[res][check] < this.cost[res]) {
-                    return false;
-                }
-            }
-            return true;
+            // Game's .checkAffordable doesn't work correctly on projects
+            return checkAffordableCustom(this.cost, max);
         }
 
         isClickable() {
@@ -1566,20 +1563,34 @@
                 return -1;
             }
 
+            // Races not allowed to execute MAD, invalid targets for MAD auto achievements even if there is nothing else to do
             const noMADRace = ["sludge", "ultra_sludge", "hellspawn"];
+            // Races that can't meaningfully contribute to genus pillar for Enlightenment, due to not-saved user chosen genus or otherwise
+            // (they do, however, have a per-race pillar!)
             const noPillarRace = ["custom", "junker", "sludge", "ultra_sludge", "hybrid", "hellspawn"];
+            // Genera that don't have a greatness achievement, and so should never get a weighting boost from missing greatness achievement
             const noGreatnessGenus = ["hybrid"];
+            // Races that can't execute any greatness reset, and so should never be used for greatness automation
             const noGreatnessRace = ["hellspawn"];
+            // Races that don't have an extinction achievement, invalid target for any extinction autoachievement
             const noExtinctionRace = ["hellspawn"];
+            // Challenges races get a huge penalty applied as they shouldn't be done automatically, unless there is nothing else to do
             const challengeRace = ["junker", "sludge", "ultra_sludge", "hellspawn"];
+
+            // List of resets that grant greatness
             const greatnessReset = ["bioseed", "ascension", "terraform", "matrix", "retire", "eden"];
+
+            // Subjectively chosen race lists that are known to perform well, slightly preferring them when multiple valid options are available for the same achievement
+            // "Mid" resets, "high" will likely also grant an Enlightenment tick
             const midTierReset = ["bioseed", "cataclysm", "whitehole", "vacuum", "terraform"];
             const highTierReset = ["ascension", "demonic", "apotheosis"];
             const bestForMid = ["human", "cath", "capybara", "gnome", "cyclops", "gecko", "dracnid", "entish", "shroomi", "antid", "sharkin", "dryad", "salamander", "yeti", "kamel", "imp", "unicorn", "synth", "shoggoth"];
             const bestForHigh = ["human", "cath", "capybara", "gnome", "cyclops", "gecko", "dracnid", "entish", "shroomi", "scorpid", "sharkin", "dryad", "salamander", "wendigo", "kamel", "balorg", "unicorn", "nano", "ghast"];
-            // Order and usefulness is very subjective but someone doing auto TP3 is probably going to unlock them all anyway
-            const goodImitates = ["dracnid", "octigoran", "unicorn", "salamander", "cyclops", "kamel", "arraak", "troll", "custom"];
-            const noImitates = ["junker", "nano", "synth"]; // Can't run Valdi, can't imitate synthetic except custom
+
+            // Imitates to prioritize if farming TP3
+            const goodImitates = ["wyvern", "dwarf", "dracnid", "octigoran", "unicorn", "salamander", "cyclops", "kamel", "arraak", "troll", "custom"];
+            // Races who cannot enter TP or cannot unlock imitate even if they can, due to either challenge conflicts or special case in rewards
+            const noImitates = ["junker", "nano", "synth", "hellspawn"];
 
             let goals = [];
             let weighting = 0;
@@ -1596,12 +1607,21 @@
             }
 
             // Check pillar
-            if ((settings.prestigeType === "ascension" && settings.prestigeAscensionPillar) || settings.prestigeType === "demonic") {
+            if (
+                (
+                    (settings.prestigeType === "ascension" && settings.prestigeAscensionPillar) ||
+                    ["demonic", "apotheosis"].includes(settings.prestigeType)
+                ) &&
+                game.global.race.universe !== 'micro'
+            ) {
                 let speciesPillarLevel = game.global.pillars[this.id] ?? 0;
-                let canPillar = !speciesPillarLevel && resources.Harmony.currentQuantity >= 1 && game.global.race.universe !== 'micro';
+                let canPillar = !speciesPillarLevel && resources.Harmony.currentQuantity >= 1;
                 let canUpgrade = speciesPillarLevel && speciesPillarLevel < starLevel;
                 if (canPillar || canUpgrade) {
                     weighting += 1000 * Math.max(0, starLevel - speciesPillarLevel);
+                    // Strongly prioritize pillaring new non-challenge species to upgrading old ones or Equilibrium
+                    if (!speciesPillarLevel && !challengeRace.includes(this.id)) weighting += 100000;
+
                     goals.push("feat_equilibrium_name");
                     // Check genus pillar for Enlightenment
                     if (!noPillarRace.includes(this.id)) {
@@ -2865,6 +2885,7 @@
         AsphodelBunker: new Action("Asphodel Bunker", "eden", "bunker", "eden_asphodel", {garrison: true}),
         AsphodelBlissDen: new Action("Asphodel Bliss Den", "eden", "bliss_den", "eden_asphodel"),
         AsphodelRectory: new Action("Asphodel Rectory", "eden", "rectory", "eden_asphodel", {housing: true}),
+        AsphodelCorruptor: new Action("Asphodel Corruptor (Warlord)", "eden", "corruptor", "eden_asphodel"),
 
         ElysiumMission: new Action("Elysium Mission", "eden", "survey_fields", "eden_elysium"),
         ElysiumFortress: new Action("Elysium Celestial Fortress", "eden", "fortress", "eden_elysium"),
@@ -3264,14 +3285,30 @@
       ],[
           () => true,
           (building) => {
+              if (building === buildings.BlackholeStellarEngine) {
+                  // `stateOffCount` is missleading for powered multisegmented buildings. This rule shouldn't ever apply to Stellar Engine, just ignore it
+                  // TODO: Might be better to ignore all multisegmented buildings, or making `stateOffCount` return 0 for multisegmented buildings, but i'm not sure about possible side effects at the moment - that would work as a hot fix
+                  return false;
+              }
+              if ((building === buildings.BadlandsAttractor || building === buildings.SpireMechBay) && building.isSmartManaged()) {
+                  // Those things might be temporaly disabled by smart logic
+                  return false;
+              }
+              if (building === buildings.RuinsGuardPost && building.isSmartManaged() && !isHellSupressUseful()) {
+                  // Prebuild guard posts. Even if we don't need supression right now they will be useful soon enough
+                  if (building.count < Math.ceil(5000 / (game.armyRating(traitVal('high_pop', 0, 1), "hellArmy", 0) * traitVal('holy', 1, '+')))) {
+                      return false;
+                  }
+              }
+              let supplyIndex = building === buildings.SpirePort ? 1 : building === buildings.SpireBaseCamp ? 2 : -1;
+              if (supplyIndex > 0 && (buildings.SpireMechBay.isSmartManaged() || buildings.SpirePurifier.isSmartManaged())) {
+                  // Prebuild ports and base camps to their optimal ratios, they will be enabled when needed. Unless mech bay and purifiers both have their smarts disabled, which means it won't ever happen.
+                  if (building.count < getBestSupplyRatio(resources.Spire_Support.maxQuantity, buildings.SpirePort.autoMax, buildings.SpireBaseCamp.autoMax)[supplyIndex]) {
+                      return false;
+                  }
+              }
               if (building._tab !== "city" && building.stateOffCount > 0) {
-                  if (building === buildings.RuinsGuardPost && building.isSmartManaged() && !isHellSupressUseful()
-                    && building.count < Math.ceil(5000 / (game.armyRating(traitVal('high_pop', 0, 1), "hellArmy", 0) * traitVal('holy', 1, '+')))) { return false; }
-                  if (building === buildings.BadlandsAttractor && building.isSmartManaged()) { return false; }
-                  if (building === buildings.SpireMechBay && building.isSmartManaged()) { return false; }
-                  let supplyIndex = building === buildings.SpirePort ? 1 : building === buildings.SpireBaseCamp ? 2 : -1;
-                  if ((supplyIndex > 0 && (buildings.SpireMechBay.isSmartManaged() || buildings.SpirePurifier.isSmartManaged()))
-                    && (building.count < getBestSupplyRatio(resources.Spire_Support.maxQuantity, buildings.SpirePort.autoMax, buildings.SpireBaseCamp.autoMax)[supplyIndex])) { return false; }
+                  // This thing not from city, switchable, and some of them disabled. We dont't need more at the moment.
                   return true;
               }
           },
@@ -3404,7 +3441,7 @@
           () => settings.buildingWeightingNeedStorage
       ],[
           () => resources.Population.maxQuantity > 50 && resources.Population.storageRatio < 0.9,
-          (building) => building.is.housing && building !== buildings.Alien1Consulate && !(building instanceof ResourceAction),
+          (building) => building.is.housing && building !== buildings.Alien1Consulate && building !== buildings.Transmitter && !(building instanceof ResourceAction),
           () => "No more houses needed",
           () => settings.buildingWeightingUselessHousing
       ],[
@@ -5652,6 +5689,10 @@
         },
 
         initLab() {
+            // TODO: Warlord is not supported yet and breaks a bunch of things, remove when support is implemented
+            if (game.global.race['warlord']) {
+                return false;
+            }
             if (buildings.SpireMechBay.count < 1) {
                 return false;
             }
@@ -6506,7 +6547,10 @@
         updateTabs(false);
 
         // Lets set our crate / container resource requirements
-        Object.defineProperty(resources.Crates, "cost", {get: () => isLumberRace() ? {Plywood: 10} : {Stone: 200}});
+        Object.defineProperty(resources.Crates, "cost", { get: () => (
+                (game.global.race['warlord'] && game.global.race['iron_wood']) ? { Lumber: 200 } :
+                isLumberRace() ? { Plywood: 10 } : { Stone: 200 }
+            )});
         resources.Containers.cost["Steel"] = 125;
 
         JobManager.craftingJobs = Object.values(crafter);
@@ -6704,6 +6748,7 @@
         buildings.AsphodelBunker.addSupport(resources.Asphodel_Support);
         buildings.AsphodelBlissDen.addSupport(resources.Asphodel_Support);
         buildings.AsphodelRectory.addSupport(resources.Asphodel_Support);
+        buildings.AsphodelCorruptor.addSupport(resources.Asphodel_Support);
 
         // Init consumptions
         buildings.MoonBase.addResourceConsumption(resources.Oil, 2);
@@ -6895,6 +6940,7 @@
 
         priorityList.push(buildings.AsphodelEncampment);
         priorityList.push(buildings.AsphodelRectory);
+        priorityList.push(buildings.AsphodelCorruptor);
         priorityList.push(buildings.AsphodelSoulEngine);
 
         priorityList.push(buildings.TitanElectrolysis);
@@ -10867,7 +10913,7 @@
     function isPillarFinished() {
         let speciesPillarLevel = game.global.pillars[game.global.race.species];
         let canPillar = !speciesPillarLevel && resources.Harmony.currentQuantity >= 1 && game.global.race.universe !== 'micro';
-        let canUpgrade = speciesPillarLevel && speciesPillarLevel < game.alevel();
+        let canUpgrade = speciesPillarLevel && speciesPillarLevel < game.alevel() && game.global.race.universe !== 'micro';
         // Always consider pillared if user doesn't want to wait for pillar, OR can't pillar + can't upgrade existing pillar
         return !settings.prestigeAscensionPillar || (!canPillar && !canUpgrade);
     }
@@ -13357,6 +13403,47 @@
         }
     }
 
+    function checkAffordableCustom(cost, max = false) {
+        let check = max ? "maxQuantity" : "currentQuantity";
+        for (let res in cost) {
+            if (!resources[res] || resources[res][check] < cost[res]) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    function getQueuedItemObj(queueItem) {
+        // id, name: used by active targets UI
+        // title: used in conflict targets
+        // cost, isAffordable: used by priority targets check below
+        if (queueItem.action === "tp-ship") {
+            return {
+                id: queueItem.id,
+                name: queueItem.label,
+                title: queueItem.label,
+                cost: poly.shipCosts(queueItem.type),
+                isAffordable: function (max) { return checkAffordableCustom(this.cost, max); },
+            };
+        }
+        else if (queueItem.action === "hell-mech") {
+            let [gems, supply] = MechManager.getMechCost(queueItem.type);
+            return {
+                id: queueItem.id,
+                name: queueItem.label,
+                title: queueItem.label,
+                cost: {
+                    Soul_Gem: gems,
+                    Supply: supply,
+                },
+                isAffordable: function(max) { return checkAffordableCustom(this.cost, max); },
+            };
+        }
+        else {
+            return buildingIds[queueItem.id] || arpaIds[queueItem.id];
+        }
+    }
+
     function updatePriorityTargets() {
         state.conflictTargets = [];
         state.queuedTargets = [];
@@ -13367,11 +13454,11 @@
 
         // Building and research queues
         let queueSave = settings.prioritizeQueue.includes("save");
-        [{type: "queue", noorder: "qAny", map: (id) => buildingIds[id] || arpaIds[id]},
-         {type: "r_queue", noorder: "qAny_res", map: (id) => techIds[id]}].forEach(queue => {
+        [{type: "queue", noorder: "qAny", map: getQueuedItemObj},
+         {type: "r_queue", noorder: "qAny_res", map: (item) => techIds[item.id]}].forEach(queue => {
             if (game.global[queue.type].display) {
                 for (let item of game.global[queue.type].queue) {
-                    let obj = queue.map(item.id);
+                    let obj = queue.map(item);
                     if (obj) {
                         state.queuedTargetsAll.push(obj);
                         if (obj.isAffordable(true)) {
@@ -13411,25 +13498,25 @@
                     }
                 }
             }
-        }
 
-        // Fake trigger for Embassy
-        if (buildings.GorddonEmbassy.isAutoBuildable() && resources.Knowledge.maxQuantity >= settings.fleetEmbassyKnowledge) {
-            let obj = buildings.GorddonEmbassy;
-            state.triggerTargets.push(obj);
-            state.conflictTargets.push({name: obj.title, cause: "Knowledge", cost: obj.cost});
-        }
-        // Fake trigger for Eden
-        if (buildings.TauStarEden.isAutoBuildable() && isPrestigeAllowed("eden")) {
-            let obj = buildings.TauStarEden;
-            state.triggerTargets.push(obj);
-            state.conflictTargets.push({name: obj.title, cause: "Prestige", cost: obj.cost});
-        }
-        // Fake trigger for Ignition
-        if (buildings.TauGas2MatrioshkaBrain.count >= 1000 && buildings.TauGas2IgniteGasGiant.isAutoBuildable() && isPrestigeAllowed("retire")) {
-            let obj = buildings.TauGas2IgniteGasGiant;
-            state.triggerTargets.push(obj);
-            state.conflictTargets.push({name: obj.title, cause: "Prestige", cost: obj.cost});
+            // Fake trigger for Embassy
+            if (buildings.GorddonEmbassy.isAutoBuildable() && resources.Knowledge.maxQuantity >= settings.fleetEmbassyKnowledge) {
+                let obj = buildings.GorddonEmbassy;
+                state.triggerTargets.push(obj);
+                state.conflictTargets.push({name: obj.title, cause: "Knowledge", cost: obj.cost});
+            }
+            // Fake trigger for Eden
+            if (buildings.TauStarEden.isAutoBuildable() && isPrestigeAllowed("eden")) {
+                let obj = buildings.TauStarEden;
+                state.triggerTargets.push(obj);
+                state.conflictTargets.push({name: obj.title, cause: "Prestige", cost: obj.cost});
+            }
+            // Fake trigger for Ignition
+            if (buildings.TauGas2MatrioshkaBrain.count >= 1000 && buildings.TauGas2IgniteGasGiant.isAutoBuildable() && isPrestigeAllowed("retire")) {
+                let obj = buildings.TauGas2IgniteGasGiant;
+                state.triggerTargets.push(obj);
+                state.conflictTargets.push({name: obj.title, cause: "Prestige", cost: obj.cost});
+            }
         }
 
         $("#tech .action").each(function() {
@@ -13626,7 +13713,8 @@
                 targetSegments = '',
                 researchTimeLeft = 0,
                 isArpaProject = type === 'arpa' || target instanceof Project,
-                isMultiSegmented = target.is && target.is.multiSegmented;
+                isMultiSegmented = target.is && target.is.multiSegmented,
+                isTablessBuilding = type === 'buildings' && !target._tab;
 
             if (target.count && !isMultiSegmented) {
                 targetName += ` #${target.count + 1}`;
@@ -13720,7 +13808,7 @@
             // for finding element in queue
             let queueid = '';
             if (type === 'buildings') {
-                queueid = `${target._tab}-${target.id}`;
+                queueid = isTablessBuilding ? `${target.id}` : `${target._tab}-${target.id}`;
             } else if (type === 'arpa') {
                 queueid = `${target._tab}${target.id}`;
             } else if (type === 'research' || type === 'triggers') {
@@ -14195,6 +14283,13 @@
     }
 
     function updateOverrides() {
+        // Safe mode doesn't update overrides and always disables script toggle
+        if (safeMode) {
+            Object.assign(settings, settingsRaw);
+            settings.masterScriptToggle = false;
+            return;
+        }
+
         let xorLists = {};
         let overrides = {};
         for (let key in settingsRaw.overrides) {
@@ -14248,7 +14343,8 @@
         if (haveTask("tax")) {
             overrides["autoTax"] = false;
         }
-        overrides["tickRate"] = Math.min(240, Math.max(1, Math.round((overrides["tickRate"] ?? settingsRaw["tickRate"])*2))/2);
+        let rawTickRate = overrides["tickRate"] ?? settingsRaw["tickRate"];
+        overrides["tickRate"] = Math.min(240, Math.max(1, Math.round(rawTickRate*2))/2);
 
         // Apply overrides
         Object.assign(settings, settingsRaw, overrides);
@@ -14553,6 +14649,17 @@
         // Expose saving/loading functions so that they can be called by other scripts
         win.importAutomationSettings = importSettings;
         win.exportAutomationSettings = exportSettings;
+
+        // Safe mode warning, if active. Hope users can't miss it
+        if (safeMode) {
+            const msg = [
+                `Script safe mode is active to let you solve problems in your configuration.`,
+                `The masterScriptToggle is always disabled in this mode, and your overrides don't get evaluated.`,
+                `Fix the problems that required you to use this mode, then remove ?safemode from the URL to deactivate.`,
+            ].join("\n");
+            displayScriptWarningNode("Safe mode active", msg, null);
+            poly.messageQueue(msg, "warning", true, ['events', 'major_events']);
+        }
     }
 
     function updateDebugData() {
@@ -16058,7 +16165,7 @@
         currentNode.empty().off("*");
 
         currentNode.append(`
-          <div style="display: inline-block; width: 90%; text-align: left; margin-bottom: 10px;">
+          <div class="script_bg_prestigeType" style="display: inline-block; width: 90%; text-align: left; margin-bottom: 10px;">
             <label>
               <span>Prestige Type</span>
               <select class="script_prestigeType" style="height: 18px; width: 150px; float: right;">
@@ -16113,8 +16220,10 @@
 
             state.goal = "Standard";
             updateSettingsFromState();
-        })
-        .on('click', {label: "Prestige Type (prestigeType)", name: "prestigeType", type: "select", options: prestigeOptions}, openOverrideModal);
+        });
+        currentNode.find(".script_bg_prestigeType")
+          .toggleClass('inactive-row', Boolean(settingsRaw.overrides.prestigeType))
+          .on('click', {label: "Prestige Type (prestigeType)", name: "prestigeType", type: "select", options: prestigeOptions}, openOverrideModal);
 
         addSettingsToggle(currentNode, "prestigeWaitAT", "Disable prestiging under Accelerated Time", "Delay reset until all accelerated time will be used, to avoid wasting it");
         addSettingsToggle(currentNode, "prestigeMADIgnoreArpa", "Ignore early game A.R.P.A.", "Disables building any A.R.P.A. projects until MAD is researched, or rival have appeared");
@@ -18706,6 +18815,9 @@
             if (event[overrideKey]) {
                 event.preventDefault();
             }
+            if (event.target.nodeName === "INPUT" && !confirm("Are you sure you wish to change the Auto Build state of ALL buildings?")) {
+                event.preventDefault();
+            }
         });
     }
 
@@ -18772,6 +18884,9 @@
         })
         .on('click', function(event){
             if (event[overrideKey]) {
+                event.preventDefault();
+            }
+            if (event.target.nodeName === "INPUT" && !confirm("Are you sure you wish to change the Auto Power state of ALL buildings?")) {
                 event.preventDefault();
             }
         });
@@ -19116,6 +19231,10 @@
                   <label>More script options available in Settings tab<br>${overrideKeyLabel}+click options to open <span class="inactive-row">advanced configuration</span></label><br>
                 </div>
               </div>`);
+
+            if (safeMode) {
+                $('#resources').append(`<p>⚠️ Safe mode active, masterScriptToggle is disabled</p>`);
+            }
 
             let collapsibleNode = $('#toggleSettingsCollapsed');
             let togglesNode = $('#scriptToggles');
