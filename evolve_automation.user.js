@@ -4994,6 +4994,10 @@
         hellAssigned: 0,
         hellReservedSoldiers: 0,
 
+        // Warlord properties
+        minions: 0,
+        enemies: 0,
+
         updateGarrison() {
             let garrison = game.global.civic.garrison;
             if (garrison) {
@@ -5018,6 +5022,8 @@
                 this.hellAssigned = fortress.assigned;
                 this.hellReservedSoldiers = this.getHellReservedSoldiers();
                 this._hellVue = getVueById("fort");
+                this.minions = game.global.portal.minions?.spawns;
+                this.enemies = game.global.portal.throne?.enemy?.length;
             } else {
                 this._hellVue = undefined;
             }
@@ -5275,7 +5281,30 @@
             }
 
             this.hellPatrolSize = Math.max(this.hellPatrolSize - count, 1);
-        }
+        },
+
+        attackEnemyFortress(enemyIndex) {
+            // Validate the enemy index
+            if (enemyIndex < 0 || enemyIndex >= game.global.portal.throne.enemy.length) {
+                return false;
+            }
+
+            // Get the Vue instance for the enemy fortress
+            let fortVue = getVueById("fort");
+            if (!fortVue) {
+                return false;
+            }
+
+            // Call the attack method with the enemy index
+            try {
+                fortVue.attack(enemyIndex);
+                return true;
+            } catch (error) {
+                console.error("Failed to attack enemy fortress:", error);
+                return false;
+            }
+        },
+
     }
 
     var FleetManagerOuter = {
@@ -7399,6 +7428,8 @@
             hellBolsterPatrolRating: 300,
             hellAttractorTopThreat: 9000,
             hellAttractorBottomThreat: 6000,
+            warlordHandleFortress: true,
+            warlordMinimumMinions: 1000,
         }
 
         applySettings(def, reset);
@@ -9062,10 +9093,19 @@
 
         if (game.global.race['warlord']) {
 
-            //if (minionCount >= settings.warMinions) {
-            //    attackEnemyFortress();
-            //}
-            return;
+            let enemies = m.enemies;
+
+            if (enemies > 0 && settings.warlordHandleFortress) {
+
+                let targetMinions = settings.warlordMinimumMinions;
+                let minionCount = m.minions;
+
+                if (minionCount > targetMinions) {
+                    m.attackEnemyFortress(0); // first enemy fortress
+                }
+            }
+
+            return;  // the rest of autoHell is broken for Warlord
         }
 
         // Determine Patrol size and count
@@ -16975,6 +17015,11 @@
         addSettingsHeader1(currentNode, "Attractors");
         addSettingsNumber(currentNode, "hellAttractorBottomThreat", "&emsp;All Attractors on below this threat", "Turn more and more attractors off when getting nearer to the top threat. Auto Power needs to be on for this to work.");
         addSettingsNumber(currentNode, "hellAttractorTopThreat", "&emsp;All Attractors off above this threat", "Turn more and more attractors off when getting nearer to the top threat. Auto Power needs to be on for this to work.");
+
+        // Warlord
+        addSettingsHeader1(currentNode, "Warlord Specific Settings");
+        addSettingsToggle(currentNode, "warlordHandleFortress", "Automatically attack enemy fortresses during Warlord", "Attacks an enemy fortress when minions are above the specified threshold");
+        addSettingsNumber(currentNode, "warlordMinimumMinions", "&emsp;Minimum minions required to attack an enemy fortress", "Will not attack if there are fewer than this many minions");
 
         document.documentElement.scrollTop = document.body.scrollTop = currentScrollPosition;
     }
